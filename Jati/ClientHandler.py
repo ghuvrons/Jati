@@ -115,7 +115,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             if self.app is not None:
                 e = traceback.format_exc()
                 self.app.Log.error(e)
-            self.send_response_message(500, "\"unknown error\"")
+            self.send_response_message(500, "unknown error")
 
     def do_POST(self):
         self.onEstablished()
@@ -137,10 +137,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
             if self.app is not None:
                 e = traceback.format_exc()
                 self.app.Log.error(e)
-            self.send_response_message(500, "\"unknown error\"")
+            self.send_response_message(500, "unknown error")
 
     def do_OPTIONS(self):
         try:
+            self.respone_headers = {}
             req_headers = self.headers["Access-Control-Request-Headers"].replace(' ', '').split(',') if "Access-Control-Request-Method" in self.headers else []
             req_method = self.headers["Access-Control-Request-Method"] if "Access-Control-Request-Method" in self.headers else None
             origin = self.headers["Origin"]
@@ -184,24 +185,26 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 pass
             self.send_response_message(204, 'success')
         except Exception:
-            self.send_response_message(500, "\"unknown error\"")
+            self.send_response_message(500, "unknown error")
 
     def _do_(self, method):
-        try:
-            if os.path.exists(self.app.appPath+'/Public'+self.path):
-                path = (self.app.appPath+'/Public'+self.path).replace('/../', '/')
-                if os.path.isdir(path):
-                    if path[-1]=='/':
-                        path += 'index.html'
-                    else:
-                        self.set_respone_header('Location', 'http://'+self.headers.get('Host', '') + self.path+'/')
-                        self.send_response_message(301)
-                        return
-                if os.path.isfile(path):
-                    f = open(path, 'rb')
-                    self.send_response_message(200, f)
+        errorHandler = None
+        self.respone_headers = {}
+        if os.path.exists(self.app.appPath+'/Public'+self.path):
+            path = (self.app.appPath+'/Public'+self.path).replace('/../', '/')
+            if os.path.isdir(path):
+                if path[-1]=='/':
+                    path += 'index.html'
+                else:
+                    self.set_respone_header('Location', 'http://'+self.headers.get('Host', '') + self.path+'/')
+                    self.send_response_message(301)
                     return
-            middleware, controller, self.parameter = self.app.route['http'].search(self.path, method)
+            if os.path.isfile(path):
+                f = open(path, 'rb')
+                self.send_response_message(200, f)
+                return
+        try:
+            middleware, controller, self.parameter, errorHandler = self.app.route['http'].search(self.path, method)
             origin = self.headers.get("Origin")
             try:
                 if origin in self.app.config["Access-Control-Allow"]["Origins"] or '*' in self.app.config["Access-Control-Allow"]["Origins"]:
@@ -214,7 +217,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             except:
                 pass
             if not controller:
-                raise HTTPError(404, 'not found')
+                raise HTTPError(404, "Not found")
             self.middlingWare(method, middleware)
             response_message = ""
             controller_arg_len = len(signature(controller)._parameters)
@@ -226,12 +229,33 @@ class HTTPHandler(BaseHTTPRequestHandler):
             else:
                 response_message = controller()
             self.send_response_message(200, response_message)
+
         except HTTPError as e:
-            self.send_response_message(e.args[0], json.dumps(e.args[1]))
-        except Exception:
-            e = traceback.format_exc()
-            self.app.Log.error(e)
-            self.send_response_message(500, "Server error.")
+            if errorHandler is not None:
+                try:
+                    self.send_response_message(
+                        e.args[0], 
+                        self.handle_error(errorHandler, e.args[0], e)
+                    )
+                except Exception as e:
+                    traceback_e = traceback.format_exc()
+                    self.app.Log.error(traceback_e)
+                    self.send_response_message(500, "Error Handler error. Please, see log.")
+            else:
+                self.send_response_message(e.args[0], e.args[1])
+
+        except Exception as e:
+            traceback_e = traceback.format_exc()
+            self.app.Log.error(traceback_e)
+            if errorHandler is not None:
+                try:
+                    self.send_response_message(500, self.handle_error(errorHandler, 500, e, traceback_e))
+                except Exception as e:
+                    traceback_e = traceback.format_exc()
+                    self.app.Log.error(traceback_e)
+                    self.send_response_message(500, "Error Handler error. Please, see log.")
+            else:
+                self.send_response_message(500, "Server error")
 
     def __ws_do__(self, msg, isSendRespond = True):
         try:
@@ -242,7 +266,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
             # }
         except ValueError:
             return
-        
+
+        errorHandler = None
         if not self.app:
             Apps = self.Applications
             self.app = Apps[self.hostname] if self.hostname in Apps else Apps["localhost"]
@@ -252,7 +277,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             request = str(msg["request"])
             if not 'data' in msg:
                 msg["data"] = {}
-            middleware, controller, self.parameter, route_respond = self.app.route['ws'].search(request, isGetRespond = True)
+            middleware, controller, self.parameter, errorHandler, route_respond = self.app.route['ws'].search(request, isGetRespond = True)
             if not controller:
                 raise WSError(404)
             self.data = msg["data"]
@@ -268,16 +293,51 @@ class HTTPHandler(BaseHTTPRequestHandler):
             if not isSendRespond or route_respond == False:
                 return
             self.ws.sendRespond(route_respond if route_respond else request, 200, response_message)
+
         except WSError as e:
-            errorCode = e.args[0]
-            self.ws.sendRespond(route_respond if route_respond else request, errorCode, "Not Found.")
-        except Exception:
-            e = traceback.format_exc()
-            self.app.Log.error(e)
-            self.ws.sendRespond(route_respond if route_respond else request, 500, "Server error.")
+            if errorHandler is not None:
+                try:
+                    self.ws.sendRespond(
+                        route_respond if route_respond else request, 
+                        e.args[0], 
+                        self.handle_error(errorHandler, e.args[0], e)
+                    )
+                except Exception as e:
+                    traceback_e = traceback.format_exc()
+                    self.app.Log.error(traceback_e)
+                    self.ws.sendRespond(route_respond if route_respond else request, 500, "Error Handler error. Please, see log.")
+            else:
+                self.ws.sendRespond(route_respond if route_respond else request, e.args[0], e.args[1])
+            
+        except Exception as e:
+            traceback_e = traceback.format_exc()
+            self.app.Log.error(traceback_e)
+            if errorHandler is not None:
+                try:
+                    sself.ws.sendRespond(route_respond if route_respond else request, 500, self.handle_error(errorHandler, 500, e, traceback_e))
+                except Exception as e:
+                    traceback_e = traceback.format_exc()
+                    self.app.Log.error(traceback_e)
+                    self.ws.sendRespond(route_respond if route_respond else request, 500, "Error Handler error. Please, see log.")
+            else:
+                self.ws.sendRespond(route_respond if route_respond else request, 500, "Server error")
 
     def _404_(self):
         self.send_response_message(404, "Not Found.")
+    
+    def handle_error(self, errorHandler, status, e, traceback_e = None):
+        errorHandler_arg_len = len(signature(errorHandler)._parameters)
+        if errorHandler_arg_len == 4:
+            response_message = errorHandler(self, status, e, traceback_e)
+        elif errorHandler_arg_len == 3:
+            response_message = errorHandler(self, status, e)
+        elif errorHandler_arg_len == 2:
+            response_message = errorHandler(self, status)
+        elif errorHandler_arg_len == 1:
+            response_message = errorHandler(self)
+        else:
+            response_message = errorHandler()
+        return response_message
 
     def handle_one_request(self):
         try:

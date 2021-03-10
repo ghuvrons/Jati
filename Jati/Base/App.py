@@ -139,12 +139,12 @@ class App:
             http_router_json = open(sys.modules[app_mod_name+".Route"].__path__[0]+"/http.json")
             http_router = json.load(http_router_json)
             http_router_json.close()
-            self.route_config['http'] = r.jsonToRoute(http_router)
+            self.route_config['http'] = r.objToRoute(http_router)
 
             ws_router_json = open(sys.modules[app_mod_name+".Route"].__path__[0]+"/ws.json")
             ws_router = json.load(ws_router_json)
             ws_router_json.close()
-            self.route_config['ws'] = r.jsonToRoute(ws_router)
+            self.route_config['ws'] = r.objToRoute(ws_router)
         except Exception as e:
             self.Log.error("Route error : %s", e)
             pass
