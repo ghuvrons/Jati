@@ -314,7 +314,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.app.Log.error(traceback_e)
             if errorHandler is not None:
                 try:
-                    sself.ws.sendRespond(route_respond if route_respond else request, 500, self.handle_error(errorHandler, 500, e, traceback_e))
+                    self.ws.sendRespond(route_respond if route_respond else request, 500, self.handle_error(errorHandler, 500, e, traceback_e))
                 except Exception as e:
                     traceback_e = traceback.format_exc()
                     self.app.Log.error(traceback_e)
