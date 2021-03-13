@@ -150,7 +150,7 @@ class Model(object):
 
         return object.__setattr__(self, name, value)
     def __getattribute__(self, name):
-        if (name is not '_Model__attributtes'
+        if (name != '_Model__attributtes'
          and hasattr(self, "_Model__attributtes") 
          and name in self.__attributtes 
          and "datatype" in self.__attributtes[name]
