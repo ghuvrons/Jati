@@ -18,6 +18,12 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
+    entry_points = {
+        'console_scripts': ['jati=Jati.CLI:main'],
+    },
     python_requires='>=3.7',
+    install_requires=[
+        "click>=5.1",
+    ]
 )
 
