@@ -13,14 +13,16 @@ def get_file_handler(filepath):
     return handler
 
 class Log:
-    def __init__(self, name = 'Jati', filepath = "log/log.log"):
+    def __init__(self, name = 'Jati', filepath = None):
         self.isTmpFull = False
         self.tmp = []
         self.streamer = None
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.DEBUG)
-        # self.logger.addHandler(get_console_handler())
-        self.logger.addHandler(get_file_handler(filepath))
+        if filepath == None:
+            self.logger.addHandler(get_console_handler())
+        else:
+            self.logger.addHandler(get_file_handler(filepath))
         self.logger.propagate = False
     
     def write(self, log):

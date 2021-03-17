@@ -44,7 +44,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             sock.context = app.ssl_context
         except Exception:
             g = traceback.format_exc()
-            log_error("ssl error %s", g)
+            self.log_error("ssl error %s", g)
         
     def setup(self):
         try:
@@ -59,7 +59,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 )
         except Exception:
             g = traceback.format_exc()
-            log_error("ssl error %s", g)
+            self.log_error("ssl error %s", g)
             self.isSetupSuccess = False
         BaseHTTPRequestHandler.setup(self)
 
@@ -314,7 +314,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.app.Log.error(traceback_e)
             if errorHandler is not None:
                 try:
-                    sself.ws.sendRespond(route_respond if route_respond else request, 500, self.handle_error(errorHandler, 500, e, traceback_e))
+                    self.ws.sendRespond(route_respond if route_respond else request, 500, self.handle_error(errorHandler, 500, e, traceback_e))
                 except Exception as e:
                     traceback_e = traceback.format_exc()
                     self.app.Log.error(traceback_e)
@@ -412,7 +412,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 else: break
             msg.close()
         else:
-            if msg is not '':
+            if msg != '':
                 self.connection.send(msg.encode('utf-8'))
     def close(self):
         self.httpServerSan.shutdown_request(self.connection)
