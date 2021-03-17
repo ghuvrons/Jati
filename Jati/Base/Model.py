@@ -1,5 +1,6 @@
 import datetime
 import Jati.Database.MySQL.Query as Query
+
 class ListOfModels():
     def __init__(self, models = []):
         self.models = models
@@ -34,6 +35,32 @@ class ModelsAsObject(object):
     def save(self):
         for key in self.__attributtes.keys():
             self.__attributtes[key].save()
+
+class ModelIterator:
+    def __init__(self, model_class, query):
+        self.model_class = model_class
+        self.query = query
+        self.result = None
+        self.i = -1
+
+    def limit(self, num):
+        self.query = self.query.select(
+            asDictionary = True,
+            limit = num,
+            isExecute = False
+        )
+        return self
+
+    def __iter__(self):
+        self.i = -1
+        self.result = self.query.getResult()
+        return self
+
+    def __next__(self):
+        self.i += 1
+        if self.i >= len(self.result):
+            raise StopIteration
+        return self.model_class.createFromDict(self.result[self.i], False)
 
 class Model(object):
     DB = None
@@ -86,12 +113,8 @@ class Model(object):
     @classmethod
     def all(this_class):
         db = this_class.Databases[this_class.DB]
-        results = db[this_class.TABLE].select(asDictionary = True)
-        models_list = []
-        for r in results:
-            model = this_class.createFromDict(r, False)
-            models_list.append(model)
-        return models_list
+        query = db[this_class.TABLE].select(asDictionary = True, isExecute = False)
+        return ModelIterator(this_class, query)
         
     @classmethod
     def search(this_class, *arg, **args):
@@ -99,14 +122,12 @@ class Model(object):
         _where = []
         for key in args.keys():
             _where.append((key, args[key], ))
-        results = db[this_class.TABLE].select(asDictionary = True, 
-            where=_where
+        query = db[this_class.TABLE].select(
+            asDictionary = True, 
+            where = _where,
+            isExecute = False
         )
-        models_list = []
-        for r in results:
-            model = this_class.createFromDict(r, False)
-            models_list.append(model)
-        return models_list
+        return ModelIterator(this_class, query)
     
     def _attributtes(self):
         return {}
