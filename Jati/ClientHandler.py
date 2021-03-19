@@ -216,9 +216,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     self.set_respone_header('Access-Control-Allow-Credentials', "true")
             except:
                 pass
+            self.middlingWare(method, middleware)
             if not controller:
                 raise HTTPError(404, "Not found")
-            self.middlingWare(method, middleware)
             response_message = ""
             controller_arg_len = len(signature(controller)._parameters)
             if controller_arg_len == 2:
@@ -278,10 +278,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
             if not 'data' in msg:
                 msg["data"] = {}
             middleware, controller, self.parameter, errorHandler, route_respond = self.app.route['ws'].search(request, isGetRespond = True)
-            if not controller:
-                raise WSError(404)
             self.data = msg["data"]
             self.middlingWare('ws', middleware)
+            if not controller:
+                raise WSError(404)
             response_message = ""
             controller_arg_len = len(signature(controller)._parameters)
             if controller_arg_len == 2:
