@@ -43,10 +43,19 @@ class ModelIterator:
         self.result = None
         self.i = -1
 
-    def limit(self, num):
+    def limit(self, num, offset = 0):
         self.query = self.query.select(
             asDictionary = True,
-            limit = num,
+            limit = (offset, num),
+            isExecute = False
+        )
+        return self
+
+    def page(self, num, limit = 20):
+        offset = limit*(num-1)
+        self.query = self.query.select(
+            asDictionary = True,
+            limit = (offset, limit),
             isExecute = False
         )
         return self

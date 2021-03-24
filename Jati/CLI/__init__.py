@@ -5,13 +5,20 @@ from .Serve import Serve
 
 @click.group()
 def main():
-    click.echo('Debug mode is %s' % ('on' if True else 'off'))
+    pass
 
 @main.command()
-def start():
-    click.echo('Starting')
+@click.option('-h', '--host', default= "127.0.0.1", show_default=True)
+@click.option('-p', '--port', default=3000, show_default=True, type=int)
+@click.option('-s', '--site', type=(str, str), multiple=True)
+@click.option('-l', '--log', default=None)
+@click.option('--ssl', default=False, type=bool)
+def start(host, port, site, log, ssl):
+    sites = {'localhost': 'Site'}
+    for s in site:
+        sites[s[0]] = s[1]
     serve = Serve()
-    serve.run()
+    serve.run(host=host, port=port, sites=sites, log_file=log, isSSL=ssl)
 
 @main.command('generate:controller')
 def generate_ctrl():
