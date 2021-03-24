@@ -81,7 +81,7 @@ class Router:
         
         current_url = url.pop(0)
         if current_url in self.sub:
-            result = self.sub[current_url]["router"].search(url, method, isGetRespond, self.sub[current_url]["errorHandler"])
+            result = self.sub[current_url]["router"].search(url, method, isGetRespond, errorHandler)
             return result
 
         for regex,variables,_router in self.sub_regrex:
