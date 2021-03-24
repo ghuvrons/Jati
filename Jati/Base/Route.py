@@ -62,7 +62,8 @@ class Router:
                     url.remove('')
                 except:
                     break
-        
+        if self.methods[method]["errorHandler"]:
+            errorHandler = self.methods[method]["errorHandler"]
         tmp = ([], None, {}, errorHandler)
         if len(url) == 0:
             if method in self.methods:
@@ -70,7 +71,7 @@ class Router:
                     self.methods[method]['middleware'], 
                     self.methods[method]['controller'], 
                     {}, 
-                    self.methods[method]["errorHandler"] if self.methods[method]["errorHandler"] else errorHandler
+                    errorHandler
                 )
                 if isGetRespond:
                     return tmp + (self.methods[method]['respond'], )
@@ -82,8 +83,8 @@ class Router:
         if current_url in self.sub:
             result = self.sub[current_url]["router"].search(url, method, isGetRespond, self.sub[current_url]["errorHandler"])
             return result
-        
-        for regex,variables,_router,errorHandler in self.sub_regrex:
+
+        for regex,variables,_router in self.sub_regrex:
             matchObj = re.match('^'+regex+'$', current_url)
             if matchObj:
                 data = {}
@@ -146,7 +147,7 @@ class Router:
                         except:
                             break
                 regex = re.sub(r'{[^{}?]+\??([^{}]+({\d+\,?\d*})?)*}', dashrepl, regex_current_url)
-                tmp = (regex, variables, Router(), errorHandler)
+                tmp = (regex, variables, Router())
                 self.sub_regrex.append(tmp)
                 tmp[2].createRoute(url, methods, controller, middleware, errorHandler, respond)
             else:
