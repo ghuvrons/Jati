@@ -43,7 +43,7 @@ class Router:
             #"get": {"controller": ..., middleware: []},
             #"post": {},
             #"ws": {},
-            #'error': {}
+            'errorHandler': None
         }
         self.sub = {
             #"sub_url": router
@@ -62,8 +62,8 @@ class Router:
                     url.remove('')
                 except:
                     break
-        if self.methods[method]["errorHandler"]:
-            errorHandler = self.methods[method]["errorHandler"]
+        if self.methods["errorHandler"]:
+            errorHandler = self.methods["errorHandler"]
         tmp = ([], None, {}, errorHandler)
         if len(url) == 0:
             if method in self.methods:
@@ -100,13 +100,13 @@ class Router:
         
     def createRoute(self, url, methods, controller, middleware, errorHandler = None, respond = None):
         if len(url) == 0:
+            self.methods['errorHandler'] = errorHandler
             for method in methods:
                 method = method.lower()
                 if not method in self.methods:
                     self.methods[method] = {
                         'controller': controller, 
                         'middleware': [], 
-                        'errorHandler': errorHandler,
                         'respond': respond
                     }
                 for mw in self.methods[method]['middleware']:
