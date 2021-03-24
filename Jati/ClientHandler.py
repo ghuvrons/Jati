@@ -4,7 +4,7 @@ import threading
 import socket
 import mimetypes
 import os, ssl, json, cgi, decimal
-from inspect import signature
+from inspect import signature, getfullargspec
 from . import Websck
 from http.server import BaseHTTPRequestHandler, HTTPStatus
 
@@ -16,6 +16,62 @@ def encode_complex(obj):
     elif '__dict__' in dir(obj):
         return obj.__dict__
     raise TypeError(repr(obj) + " is not JSON serializable.") 
+
+class Request:
+    def __init__(self, httpHandler):
+        self.httpHandler = httpHandler
+        self.client_address = self.httpHandler.client_address
+        self.headers = {}
+        self.parameters = {}
+        self.query_parameters = {}
+        self.data = None
+        self.rfile = None
+    
+    def reset(self):
+        self.headers = self.httpHandler.headers
+        self.parameters = {}
+        self.query_parameters = {}
+        self.data = None
+        self.rfile = self.httpHandler.rfile
+
+    def parseData(self):
+        if not 'Content-Type' in self.headers:
+            self.data = None
+        elif self.headers['Content-Type'] == "application/json":
+            self.data = json.loads(self.rfile.read(int(self.headers['Content-Length'])).decode('UTF-8'))
+        else:
+            self.data = cgi.FieldStorage(
+                    fp=self.rfile, 
+                    headers=self.headers,
+                    environ={'REQUEST_METHOD':'POST',
+                                'CONTENT_TYPE':self.headers['Content-Type']
+                    })
+    
+    def parseWsData(self, msg):
+        try:
+            msg = json.loads(msg)
+            # msg = {
+            #     'request': ...
+            #     'data': ...
+            # }
+        except ValueError:
+            return
+        
+        if not 'request' in msg:
+            raise WSError(500)
+        request = str(msg["request"])
+        if not 'data' in msg:
+            msg["data"] = {}
+        self.data = msg["data"]
+
+        return request
+
+class Respond:
+    def __init__(self, httpHandler):
+        self.httpHandler = httpHandler
+    def set_header(self, key, value):
+        self.httpHandler.respone_headers[key] = value
+
 
 class HTTPHandler(BaseHTTPRequestHandler):
     isSSL = False
@@ -35,6 +91,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.httpServerSan = httpServerSan
         self.httpServerSan.clients.append(self)
         self.isSetupSuccess = True
+        self._request = Request(self)
+        self._respond = Respond(self)
         BaseHTTPRequestHandler.__init__(self, client_sock, client_address, self.httpServerSan.server_socket)
 
     def servername_callback(self, sock, req_hostname, cb_context, as_callback=True):
@@ -67,6 +125,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
         pass
 
     def onEstablished(self):
+        self._request.reset()
+        self.respone_headers = {}
         Apps = self.Applications
         if self.hostname == None:
             host = self.headers.get("Host", "").split(":")[0]
@@ -74,7 +134,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 self.hostname = host
         self.app = Apps[self.hostname] if self.hostname in Apps else Apps["localhost"]
 
-    def middlingWare(self, method, middleware):
+    def runMiddleWare(self, method, middleware):
         middleware_has_run = []
         cookies = self.app.Session.get_cookies(self)
         if self.session and ("PySessID" in cookies and self.session.id != cookies["PySessID"]):
@@ -94,9 +154,39 @@ class HTTPHandler(BaseHTTPRequestHandler):
             else:
                 if not mw():
                     raise HTTPError(500)
+    
+    def runController(self, controller):
+        if getfullargspec(controller).varkw is None:
+            response_message = controller()
+        else:
+            kw = {
+                "request": self._request,
+                "respond": self._respond,
+                "session": None,
+                "auth": None
+            }
+            response_message = controller(**kw)
+        return response_message
+    
+    def handle_error(self, errorHandler, status, message, e, traceback_e = None):
+        if getfullargspec(errorHandler).varkw is None:
+            response_message = errorHandler()
+        else:
+            kw = {
+                "request": self._request,
+                "respond": self._respond,
+                "session": None,
+                "auth": None,
+                "error": e,
+                "error_code": status,
+                "error_message": message,
+                "traceback": traceback_e,
+            }
+            response_message = errorHandler(**kw)
+            
+        return response_message
 
     def do_GET(self):
-        self.onEstablished()
         try:
             if 'Sec-WebSocket-Key' in self.headers:
                 self.ws = Websck.ClientHandler(self)
@@ -118,19 +208,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_response_message(500, "unknown error")
 
     def do_POST(self):
-        self.onEstablished()
         try:
-            if not 'Content-Type' in self.headers:
-                self.data = None
-            elif self.headers['Content-Type'] == "application/json":
-                self.data = json.loads(self.rfile.read(int(self.headers['Content-Length'])).decode('UTF-8'))
-            else:
-                self.data = cgi.FieldStorage(
-                        fp=self.rfile, 
-                        headers=self.headers,
-                        environ={'REQUEST_METHOD':'POST',
-                                 'CONTENT_TYPE':self.headers['Content-Type']
-                        })
+            self._request.parseData()
             self._do_('post')
         except Exception:
             e = traceback.format_exc()
@@ -189,7 +268,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
     def _do_(self, method):
         errorHandler = None
-        self.respone_headers = {}
         if os.path.exists(self.app.appPath+'/Public'+self.path):
             path = (self.app.appPath+'/Public'+self.path).replace('/../', '/')
             if os.path.isdir(path):
@@ -216,18 +294,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     self.set_respone_header('Access-Control-Allow-Credentials', "true")
             except:
                 pass
-            self.middlingWare(method, middleware)
+            self.runMiddleWare(method, middleware)
             if not controller:
                 raise HTTPError(404, "Not found")
             response_message = ""
-            controller_arg_len = len(signature(controller)._parameters)
-            if controller_arg_len == 2:
-                self.session = self.session if self.session else self.app.Session.create(self)
-                response_message = controller(self, self.session)
-            elif controller_arg_len == 1:
-                response_message = controller(self)
-            else:
-                response_message = controller()
+            response_message = self.runController(controller)
             self.send_response_message(200, response_message)
 
         except HTTPError as e:
@@ -235,7 +306,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 try:
                     self.send_response_message(
                         e.args[0], 
-                        self.handle_error(errorHandler, e.args[0], e)
+                        self.handle_error(errorHandler, e.args[0], e.args[1] if len(e.args) > 1 else None, e)
                     )
                 except Exception as e:
                     traceback_e = traceback.format_exc()
@@ -249,47 +320,26 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.app.Log.error(traceback_e)
             if errorHandler is not None:
                 try:
-                    self.send_response_message(500, self.handle_error(errorHandler, 500, e, traceback_e))
+                    self.send_response_message(500, self.handle_error(errorHandler, 500, "Internal server error", e, traceback_e))
                 except Exception as e:
                     traceback_e = traceback.format_exc()
                     self.app.Log.error(traceback_e)
                     self.send_response_message(500, "Error Handler error. Please, see log.")
             else:
-                self.send_response_message(500, "Server error")
+                self.send_response_message(500, "Internal server error")
 
     def __ws_do__(self, msg, isSendRespond = True):
-        try:
-            msg = json.loads(msg)
-            # msg = {
-            #     'request': ...
-            #     'data': ...
-            # }
-        except ValueError:
-            return
-
         errorHandler = None
-        if not self.app:
-            Apps = self.Applications
-            self.app = Apps[self.hostname] if self.hostname in Apps else Apps["localhost"]
         try:
-            if not 'request' in msg:
-                raise WSError(500)
-            request = str(msg["request"])
-            if not 'data' in msg:
-                msg["data"] = {}
+            request = self._request.parseWsData(msg)
             middleware, controller, self.parameter, errorHandler, route_respond = self.app.route['ws'].search(request, isGetRespond = True)
-            self.data = msg["data"]
-            self.middlingWare('ws', middleware)
+            self.runMiddleWare('ws', middleware)
             if not controller:
                 raise WSError(404)
             response_message = ""
-            controller_arg_len = len(signature(controller)._parameters)
-            if controller_arg_len == 2:
-                response_message = controller(self, self.session)
-            elif controller_arg_len == 1:
-                response_message = controller(self)
-            else:
-                response_message = controller()
+            response_message = self.runController(controller)
+            self.send_response_message(200, response_message)
+
             if not isSendRespond or route_respond == False:
                 return
             self.ws.sendRespond(route_respond if route_respond else request, 200, response_message)
@@ -300,7 +350,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     self.ws.sendRespond(
                         route_respond if route_respond else request, 
                         e.args[0], 
-                        self.handle_error(errorHandler, e.args[0], e)
+                        self.handle_error(errorHandler, e.args[0], e.args[1] if len(e.args) > 1 else None, e)
                     )
                 except Exception as e:
                     traceback_e = traceback.format_exc()
@@ -314,30 +364,16 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.app.Log.error(traceback_e)
             if errorHandler is not None:
                 try:
-                    self.ws.sendRespond(route_respond if route_respond else request, 500, self.handle_error(errorHandler, 500, e, traceback_e))
+                    self.ws.sendRespond(route_respond if route_respond else request, 500, self.handle_error(errorHandler, 500, "Internal server error", e, traceback_e))
                 except Exception as e:
                     traceback_e = traceback.format_exc()
                     self.app.Log.error(traceback_e)
                     self.ws.sendRespond(route_respond if route_respond else request, 500, "Error Handler error. Please, see log.")
             else:
-                self.ws.sendRespond(route_respond if route_respond else request, 500, "Server error")
+                self.ws.sendRespond(route_respond if route_respond else request, 500, "Internal server error")
 
     def _404_(self):
         self.send_response_message(404, "Not Found.")
-    
-    def handle_error(self, errorHandler, status, e, traceback_e = None):
-        errorHandler_arg_len = len(signature(errorHandler)._parameters)
-        if errorHandler_arg_len == 4:
-            response_message = errorHandler(self, status, e, traceback_e)
-        elif errorHandler_arg_len == 3:
-            response_message = errorHandler(self, status, e)
-        elif errorHandler_arg_len == 2:
-            response_message = errorHandler(self, status)
-        elif errorHandler_arg_len == 1:
-            response_message = errorHandler(self)
-        else:
-            response_message = errorHandler()
-        return response_message
 
     def handle_one_request(self):
         try:
@@ -367,6 +403,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     HTTPStatus.NOT_IMPLEMENTED,
                     "Unsupported method (%r)" % self.command)
                 return
+                
+            self.onEstablished()
             method = getattr(self, mname)
             method()
             self.wfile.flush() #actually send the response if not already done.
