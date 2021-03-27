@@ -1,6 +1,7 @@
 from Jati.Base.Log import Log
 from Jati.Base.Session import SessionHandler
 from Jati.Base.Route import BaseRoute, Route
+from Jati.Base.Auth import AuthHandler
 import sys, os, json, ssl
 
 class App:
@@ -13,6 +14,7 @@ class App:
         self.Services = {}
         self.Log = Log('Jati.'+app_module.__name__, filepath=self.appPath+"/Log/log.log")
         self.route_config = {'http': [], 'ws': []}
+        self.authHandler = AuthHandler()
         self.importAppSystem()
         httpRouter = BaseRoute(
             self.app_module, 
@@ -54,6 +56,7 @@ class App:
 
         self.Session = SessionHandler(self.config["Session-path"])
         self.Session.start()
+
     def importAppSystem(self):
         app_mod_name = self.app_module.__name__
         __import__(app_mod_name, fromlist=[
@@ -73,7 +76,6 @@ class App:
             middleware_json = open(sys.modules[app_mod_name+".Middleware"].__path__[0]+"/middleware.json")
             middleware_list = json.load(middleware_json)
             middleware_json.close()
-
             __import__(app_mod_name+".Middleware", fromlist=[str(s) for s in middleware_list], globals=globals())
         except Exception as e:
             self.Log.error( "Middleware error : %s", e)
@@ -148,6 +150,16 @@ class App:
         except Exception as e:
             self.Log.error("Route error : %s", e)
             pass
+
+        try:
+            auth_config_json = open(sys.modules[app_mod_name].__path__[0]+"/Auth.json")
+            auth_config = json.load(auth_config_json)
+            auth_config_json.close()
+            self.authHandler.setUserModel(self.Models[auth_config['user']])
+        except Exception as e:
+            self.Log.error("Auth error : %s", e)
+            pass
+        
 
     def printAllModules(self):
         modules = sys.modules.keys()

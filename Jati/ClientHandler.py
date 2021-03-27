@@ -91,6 +91,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.httpServerSan = httpServerSan
         self.httpServerSan.clients.append(self)
         self.isSetupSuccess = True
+        self.auth = None
         self._request = Request(self)
         self._respond = Respond(self)
         BaseHTTPRequestHandler.__init__(self, client_sock, client_address, self.httpServerSan.server_socket)
@@ -134,6 +135,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 self.hostname = host
         self.app = Apps[self.hostname] if self.hostname in Apps else Apps["localhost"]
 
+    def runAuthorization(self):
+        auth_token = self.headers.get("Authorization", None)
+        if auth_token:
+            auth_type, auth_token = auth_token.split(" ", 1)
+            self.auth = self.app.authHandler.authenticate(auth_type, auth_token)
+
     def runMiddleWare(self, method, middleware):
         middleware_has_run = []
         cookies = self.app.Session.get_cookies(self)
@@ -163,7 +170,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 "request": self._request,
                 "respond": self._respond,
                 "session": None,
-                "auth": None
+                "auth": self.auth
             }
             response_message = controller(**kw)
         return response_message
@@ -176,7 +183,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 "request": self._request,
                 "respond": self._respond,
                 "session": None,
-                "auth": None,
+                "auth": self.auth,
                 "error": e,
                 "error_code": status,
                 "error_message": message,
@@ -188,6 +195,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
+            self.runAuthorization()
             if 'Sec-WebSocket-Key' in self.headers:
                 self.ws = Websck.ClientHandler(self)
                 self.ws.onMessage = self.__ws_do__
@@ -209,6 +217,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            self.runAuthorization()
             self._request.parseData()
             self._do_('post')
         except Exception:
