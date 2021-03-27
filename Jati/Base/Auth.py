@@ -1,4 +1,5 @@
-# import jwt
+# import jwt\
+import base64
 
 # Auth has user
 class Auth:
@@ -10,12 +11,15 @@ class Auth:
         return True
 
 class AuthHandler:
-    def __init__(self, secretKey):
+    def __init__(self):
         self.userModel = None
-        self.secretKey = secretKey
+        self.secretKey = "Jati-Key"
 
-    def setUserModel(self):
+    def setUserModel(self, userModel):
         self.userModel = userModel
+
+    def setSecretKey(self, secretKey):
+        self.secretKey = secretKey
 
     def authenticate(self, authType, token):
         auth = Auth()
@@ -25,7 +29,7 @@ class AuthHandler:
             users = self.userModel.search(id=user_id, key=user_key).limit(1)
             for u in users:
                 user = u
-        else if authType == 'Bearer':
+        elif authType == 'Bearer':
             pass
         auth.user = user
         return auth
