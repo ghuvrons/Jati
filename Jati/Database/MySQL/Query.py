@@ -120,7 +120,7 @@ class Query:
         if having is not None:      self.having     = having
         if order_by is not None:    self.order_by   = order_by
         if limit is not None:       self.limit      = limit
-        if where is not None:
+        if self.where_condition is None or where is not None:
             self.where_condition = self._where(where)
         
         self.query = 'SELECT '

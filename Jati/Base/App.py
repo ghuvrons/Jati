@@ -152,12 +152,12 @@ class App:
             pass
 
         try:
-            auth_config_json = open(sys.modules[app_mod_name].__path__[0]+"/Auth.json")
+            auth_config_json = open(sys.modules[app_mod_name].__path__[0]+"/Auth/Auth.json")
             auth_config = json.load(auth_config_json)
             auth_config_json.close()
             self.authHandler.setUserModel(self.Models[auth_config['user']])
             
-            auth_key_file = open(sys.modules[app_mod_name].__path__[0]+"/auth.key")
+            auth_key_file = open(sys.modules[app_mod_name].__path__[0]+"/Auth/auth.key")
             auth_key = auth_key_file.read()
             auth_key_file.close()
             self.authHandler.setSecretKey(auth_key)

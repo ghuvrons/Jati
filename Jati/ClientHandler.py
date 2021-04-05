@@ -139,7 +139,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         auth_token = self.headers.get("Authorization", None)
         if auth_token:
             auth_type, auth_token = auth_token.split(" ", 1)
-            self.auth = self.app.authHandler.authenticate(auth_type, auth_token)
+            self.auth = self.app.authHandler.authenticate(auth_type, auth_token, auth=self.auth)
 
     def runMiddleWare(self, method, middleware):
         middleware_has_run = []
@@ -195,18 +195,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            self.runAuthorization()
-            if 'Sec-WebSocket-Key' in self.headers:
-                self.ws = Websck.ClientHandler(self)
-                self.ws.onMessage = self.__ws_do__
-                self.session = self.app.Session.create(self)
-                self.__ws_do__(json.dumps({
-                    'request': "",
-                    'data': None
-                }), isSendRespond = False)
-                self.ws.handle()
-                return
-            self.data = None
             self._do_('get')
         except Exception:
             e = traceback.format_exc()
@@ -217,7 +205,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            self.runAuthorization()
             self._request.parseData()
             self._do_('post')
         except Exception:
@@ -292,6 +279,21 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 return
         try:
             middleware, controller, self.parameter, errorHandler = self.app.route['http'].search(self.path, method)
+
+            self.runAuthorization()
+
+            if 'Sec-WebSocket-Key' in self.headers:
+                self.ws = Websck.ClientHandler(self)
+                self.ws.onMessage = self.__ws_do__
+                self.session = self.app.Session.create(self)
+                self.__ws_do__(json.dumps({
+                    'request': "",
+                    'data': None
+                }), isSendRespond = False)
+                self.ws.handle()
+                return
+            self.data = None
+            
             origin = self.headers.get("Origin")
             try:
                 if origin in self.app.config["Access-Control-Allow"]["Origins"] or '*' in self.app.config["Access-Control-Allow"]["Origins"]:
