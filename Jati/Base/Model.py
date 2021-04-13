@@ -74,12 +74,12 @@ class ModelIterator:
 class Model(object):
     DB = None
     TABLE = None
+    PRIMARY_KEY = 'id'
     WHERE = {}
     Databases = {}
     Log = None
 
     def __init__(self, *arg, **kw):
-        self._primary_key = "id"
         self.__id = None
         self.__updated__attr = {}
         self.__attributtes = self._attributtes()
@@ -99,8 +99,8 @@ class Model(object):
         model = this_class(**args)
         if not is_new:
             model.__updated__attr = {}
-            if model._primary_key in args.keys():
-                model.__id = args[model._primary_key]
+            if this_class.PRIMARY_KEY in args.keys():
+                model.__id = args[this_class.PRIMARY_KEY]
         return model
 
     @classmethod
@@ -236,8 +236,8 @@ class Model(object):
 
     def __generate__attrs(self):
         _attrs = self.__attributtes
-        if self._primary_key in _attrs.keys():
-            _attrs[self._primary_key]['primary'] = True
+        if self.PRIMARY_KEY in _attrs.keys():
+            _attrs[self.PRIMARY_KEY]['primary'] = True
         for _key in _attrs.keys():
             if _attrs[_key]["datatype"] == 'relation':
                 self.__relations[_key] = {
@@ -252,18 +252,18 @@ class Model(object):
             result = db.insert(self.__updated__attr)
             if result is not None:
                 self.__id = result.result
-                self.__setattr__(self._primary_key, self.__id)
+                self.__setattr__(self.PRIMARY_KEY, self.__id)
                 return result.result
         else:
             result = db.update(self.__updated__attr,
-                where=[(self._primary_key, self.__id)]
+                where=[(self.PRIMARY_KEY, self.__id)]
             )
             return result.result
     
     def delete(self):
         db = self.Databases[self.DB][self.TABLE]
         if self.__id is not None:
-            result = db.delete(where=[(self._primary_key, self.__id)])
+            result = db.delete(where=[(self.PRIMARY_KEY, self.__id)])
             if result is not None:
                 return True
 
