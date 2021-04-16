@@ -71,7 +71,7 @@ class Database:
         return Connection(self.options)
 
     def __getitem__(self, table):
-        return Query(table, self)
+        return self.Q(table, self)
 
     def close(self):
         for conn in self.allConnection:
