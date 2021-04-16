@@ -2,27 +2,35 @@ from threading import Event
 import datetime
 
 class QueryResult:
-    def __init__(self, result, query):
-        self.result = result
+    def __init__(self, query, isSelectQuery = False):
         self.query = query
-    def __len__(self):
-        if type(self.result) in [list, dict]:
-            return len(self.result)
-        return 0
-    def __getitem__(self, index):
-        return self.result[index]
-        
+        self.event = Event()
+        self.isSelectQuery = isSelectQuery
+        self.cursor = None
+        self.lastid = None
+        self.error = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.cursor is not None:
+            data = self.cursor.fetchone()
+            if data:
+                return data
+            self.cursor.close()
+        raise StopIteration
+
 class Query:
+    QueryResult = QueryResult
     operator = ["=", "!=", '<',"<=", ">=", ">", "is", 'like', 'in', 'regexp']
     def __init__(self, table, db = None):
         self.query = None
-        self.event = Event()
-        self.result = QueryResult(None, self.query)
+        self.isExecuted = False
         self.error = None
         self.db = db
         self.isSelectQuery = False
         self.asDictionary = False
-
 
         self.column = None
         self.where_condition = None
@@ -69,6 +77,7 @@ class Query:
         if self.db == None:
             return self
         else:
+            self.isExecuted = True
             return self.db.execute(self)
 
     def update(self, data, where = None):
@@ -89,6 +98,7 @@ class Query:
         if self.db == None:
             return self
         else:
+            self.isExecuted = True
             return self.db.execute(self)
 
     def delete(self, where = None):
@@ -99,36 +109,27 @@ class Query:
         if self.db == None:
             return self
         else:
+            self.isExecuted = True
             return self.db.execute(self)
         
-    def select(self, 
-      column = None,
-      where = None,
-      group_by = None,
-      having = None,
-      order_by = None,
-      limit = None,
-      offset = None,
-      asDictionary = False,
-      isExecute = True
-    ):
-        self.asDictionary = asDictionary
+    def select(self, *column, **kwargs):
+        self.asDictionary = asDictionary if 'asDictionary' in kwargs else False
         self.isSelectQuery = True
+        isExecute = kwargs['isExecute'] if 'isExecute' in kwargs else True
+        where = kwargs['where'] if 'where' in kwargs else True
 
-        if column is not None:      self.column     = column
-        if group_by is not None:    self.group_by   = group_by
-        if having is not None:      self.having     = having
-        if order_by is not None:    self.order_by   = order_by
-        if limit is not None:       self.limit      = limit
-        if self.where_condition is None or where is not None:
+        if len(column) > 0:         self.column     = column
+        if 'group_by' in kwargs:    self.group_by   = kwargs['group_by']
+        if 'having' in kwargs:      self.having     = kwargs['having']
+        if 'order_by' in kwargs:    self.order_by   = kwargs['order_by']
+        if 'limit' in kwargs:       self.limit      = kwargs['limit']
+        if self.where_condition is None or where in kwargs:
             self.where_condition = self._where(where)
         
         self.query = 'SELECT '
         if not self.column:
             self.query += '*'
         else:
-            if self.column not in [tuple, list]:
-                self.column = [self.column]
             isFirst = True
             for selected in self.column:
                 if isFirst:
@@ -145,7 +146,7 @@ class Query:
         self.query += ' WHERE '+self.where_condition[1]
         
         if self.group_by:
-            group_by_query += ''
+            group_by_query = ''
             if type(self.group_by) not in [list, tuple]:
                 self.group_by = [self.group_by]
             for grp_by in options["group_by"]:
@@ -183,11 +184,12 @@ class Query:
         if self.db == None or not isExecute:
             return self
         else:
+            self.isExecuted = True
             return self.db.execute(self)
     
     def getResult(self):
-        if self.result.result is not None:
-            return self.result
+        if not self.isExecuted:
+            return self
         if self.isSelectQuery:
             return self.db.execute(self)
 
