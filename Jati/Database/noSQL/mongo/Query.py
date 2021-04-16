@@ -1,40 +1,20 @@
-from threading import Event
-
-class QueryResult:
-    def __init__(self, query, isSelectQuery = False):
-        self.query = query
-        self.event = Event()
-        self.isSelectQuery = isSelectQuery
-        self.cursor = None
-        self.lastid = None
-        self.error = None
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self.cursor is not None:
-            data = self.cursor.fetchone()
-            if data:
-                return data
-            self.cursor.close()
-        raise StopIteration
-
 class Query:
     QueryResult = QueryResult
     def __init__(self, collection, db = None):
         self.db = db
         self.collection = collection
 
-    def insert(self, data): pass
+    def insert(self, data): 
+        return self.db.connection[self.collection].insert_one(data).inserted_id
 
-    def update(self, data, where = None): pass
+    def update(self, data, where): 
+        return self.db.connection[self.collection].update_many(where, data).inserted_id
 
-    def delete(self, where = None): pass
+    def delete(self, where): 
+        return self.db.connection[self.collection].delete_many(where).inserted_id
 
     def select(self, where):
-        return self.db.connection[self.collection].find(where)
+        return self.QueryResult(self.db.connection[self.collection].find(where))
 
-    def select_one(self, *column, **kwargs): pass
-
-    def getResult(self): pass
+    def select_one(self, where): 
+        return self.db.connection[self.collection].find_one(where)
