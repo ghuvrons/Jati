@@ -24,6 +24,7 @@ setuptools.setup(
     python_requires='>=3.7',
     install_requires=[
         "click>=5.1",
+        "PyMySQL==1.0.2"
     ]
 )
 
