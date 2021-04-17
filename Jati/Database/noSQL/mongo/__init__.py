@@ -7,3 +7,6 @@ class db(Database):
 
     def createConnection(self):
         return Connection(self.options)
+        
+    def __getitem__(self, collection):
+        return self.connection[collection]

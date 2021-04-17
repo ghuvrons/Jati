@@ -1,4 +1,5 @@
 import datetime
+from bson.objectid import ObjectId
 
 class ListOfModels():
     def __init__(self, models = []):
@@ -69,7 +70,7 @@ class ModelIterator:
 class Model(object):
     DB = None
     COLLECTION = None
-    PRIMARY_KEY = 'id'
+    PRIMARY_KEY = '_id'
     WHERE = {}
     Databases = {}
     Log = None
@@ -101,12 +102,17 @@ class Model(object):
     @classmethod
     def one(this_class, *arg, **args):
         db = this_class.Databases[this_class.DB]
-        _where = []
+        _where = {}
         for key in args.keys():
-            _where.append((key, args[key], ))
+            val = args[key]
+            if type(val) is not dict:
+                val = {"$eq": val}
+            _where[key] = val
         for key in this_class.WHERE.keys():
-            _where.append((key, this_class.WHERE[key], ))
-        result = db[this_class.COLLECTION].select_one(where)
+            if type(val) is not dict:
+                val = {"$eq": val}
+            _where[key] = val
+        result = db[this_class.COLLECTION].find_one(_where)
         model = None
         if result:
             model = this_class.createFromDict(result, False)
@@ -115,24 +121,28 @@ class Model(object):
     @classmethod
     def all(this_class):
         db = this_class.Databases[this_class.DB]
-        _where = []
+        _where = {}
         for key in this_class.WHERE.keys():
-            _where.append((key, this_class.WHERE[key], ))
-        query = db[this_class.COLLECTION].select(
-            where = _where,
-            isExecute = False
-        )
+            if type(val) is not dict:
+                val = {"$eq": val}
+            _where[key] = val
+        query = db[this_class.COLLECTION].find(_where)
         return ModelIterator(this_class, query)
         
     @classmethod
     def search(this_class, *arg, **args):
         db = this_class.Databases[this_class.DB]
-        _where = []
+        _where = {}
         for key in args.keys():
-            _where.append((key, args[key], ))
+            val = args[key]
+            if type(val) is not dict:
+                val = {"$eq": val}
+            _where[key] = val
         for key in this_class.WHERE.keys():
-            _where.append((key, this_class.WHERE[key], ))
-        query = db[this_class.COLLECTION].select(_where)
+            if type(val) is not dict:
+                val = {"$eq": val}
+            _where[key] = val
+        query = db[this_class.COLLECTION].find(_where)
         return ModelIterator(this_class, query)
     
     def _attributtes(self):
@@ -149,6 +159,8 @@ class Model(object):
             new_value = None
             if value is None:
                 new_value = value
+            elif datatype == 'object_id':
+                new_value = ObjectId(value)
             elif datatype == 'int':
                 new_value = int(value)
             elif datatype == 'float':
@@ -169,88 +181,44 @@ class Model(object):
                 new_value = value
             elif datatype == 'dict':
                 new_value = value
-            elif datatype == 'relation_has_one':
-                new_value = value
-            elif datatype == 'relation_has_many':
-                new_value = value
-            if datatype not in ['relation_has_one', 'relation_has_many', 'relation_as_object']:
-                self.__updated__attr[name] = new_value
+            self.__updated__attr[name] = new_value
             return object.__setattr__(self, name, new_value)
         return object.__setattr__(self, name, value)
-
-    def __getattribute__(self, name):
-        if (name != '_Model__attributtes'
-         and hasattr(self, "_Model__attributtes") 
-         and name in self.__attributtes 
-         and "datatype" in self.__attributtes[name]
-        ):
-            datatype = self.__attributtes[name]["datatype"]
-            if datatype == 'relation_has_one':
-                if object.__getattribute__(self, name) == None:
-                    _on = self.__attributtes[name]["on"]
-                    _class_model = self.__attributtes[name]["class_model"]
-                    _where = {}
-                    for key in _on.keys():
-                        _where[_on[key]] = self.__getattribute__(key)
-                    model = _class_model.one(**_where)
-                    object.__setattr__(self, name, model)
-            elif datatype == 'relation_has_many':
-                if object.__getattribute__(self, name) == None:
-                    _on = self.__attributtes[name]["on"]
-                    _class_model = self.__attributtes[name]["class_model"]
-                    _where = {}
-                    for key in _on.keys():
-                        _where[key] = self.__getattribute__(_on[key])
-                    models = _class_model.search(**_where)
-                    object.__setattr__(self, name, models)
-            elif datatype == 'relation_as_object':
-                if object.__getattribute__(self, name) == None:
-                    _on = self.__attributtes[name]["on"]
-                    _key = self.__attributtes[name]["key"]
-                    _class_model = self.__attributtes[name]["class_model"]
-                    _where = {}
-                    for key in _on.keys():
-                        _where[_on[key]] = self.__id
-                    models = _class_model.search(**_where)
-                    object.__setattr__(self, name, ModelsAsObject(_class_model, _key, models, 
-                            parent=self, 
-                            on=_on
-                        )
-                    )
-        return object.__getattribute__(self, name)
 
     def __generate__attrs(self):
         _attrs = self.__attributtes
         if self.PRIMARY_KEY in _attrs.keys():
             _attrs[self.PRIMARY_KEY]['primary'] = True
         for _key in _attrs.keys():
-            if _attrs[_key]["datatype"] == 'relation':
-                self.__relations[_key] = {
-                    "class_model":_attrs[_key]["class_model"],
-                    "data": []
-                }
             setattr(self, _key, _attrs[_key]["default"] if "default" in _attrs[_key] else None)
             
     def save(self):
         db = self.Databases[self.DB][self.COLLECTION]
         if self.__id is None:
-            result = db.insert(self.__updated__attr)
-            if result is not None:
-                self.__id = result.result
+            inserted_id = db.insert_one(self.__updated__attr).inserted_id
+            if inserted_id is not None:
+                self.__id = inserted_id
                 self.__setattr__(self.PRIMARY_KEY, self.__id)
-                return result.result
+                return True
         else:
-            result = db.update(self.__updated__attr,
-                where=[(self.PRIMARY_KEY, self.__id)]
-            )
-            return result.result
+            result = db.update_one({self.PRIMARY_KEY: {"$eq": self.__id}}, self.__updated__attr)
+            return True
+        return False
     
     def delete(self):
         db = self.Databases[self.DB][self.COLLECTION]
         if self.__id is not None:
-            result = db.delete(where=[(self.PRIMARY_KEY, self.__id)])
+            result = db.delete_one({self.PRIMARY_KEY: {"$eq": self.__id}})
             if result is not None:
                 return True
+        return False
+
+    @staticmethod
+    def _objectId(default = None):
+        return {
+            "datatype" : "object_id",
+            "default": default if not default else ObjectId(default)
+        }
 
     @staticmethod
     def _integer(default = 0):
@@ -307,32 +275,3 @@ class Model(object):
             "datatype" : "dict",
             "default": default
         }
-
-    @staticmethod
-    def _hasOne(class_model, on = {}):
-        return {
-            "datatype" : "relation_has_one",
-            "class_model" : class_model,
-            "on" : on,
-            "default": None
-        }
-    
-    @staticmethod
-    def _hasMany(class_model, on = {}):
-        return {
-            "datatype" : "relation_has_many",
-            "class_model" : class_model,
-            "on" : on,
-            "default": None
-        }
-    
-    @staticmethod
-    def _hasObject(class_model, on = {}, key="key"):
-        return {
-            "datatype" : "relation_as_object",
-            "class_model" : class_model,
-            "on" : on,
-            "key" : key,
-            "default": None
-        }
-    

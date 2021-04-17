@@ -1,23 +1,21 @@
 from threading import Event
 
 class QueryResult:
-    def __init__(self, query, isSelectQuery = False):
-        self.query = query
-        self.event = Event()
-        self.isSelectQuery = isSelectQuery
-        self.cursor = None
-        self.lastid = None
+    def __init__(self, cursor):
+        self.cursor = cursor
         self.error = None
+
+    def limit(n):
+        self.cursor = self.cursor.limit(n)
 
     def __iter__(self):
         return self
 
     def __next__(self):
         if self.cursor is not None:
-            data = self.cursor.fetchone()
+            data = self.cursor.__next__()
             if data:
                 return data
-            self.cursor.close()
         raise StopIteration
 
 class Query:
@@ -32,8 +30,6 @@ class Query:
 
     def delete(self, where = None): pass
 
-    def select(self, *column, **kwargs): pass
+    def select(self, where = None): pass
 
-    def select_one(self, *column, **kwargs): pass
-
-    def getResult(self): pass
+    def select_one(self, where = None): pass
