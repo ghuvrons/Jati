@@ -3,41 +3,35 @@ import re, json
 
 class Route:
     def group(self, *arg, **args):
-        key = ('url', 'middleware', 'group', )
-        obj = {'url':'/', 'middleware':[], 'group':[]}
+        obj = {'url':'/', 'middleware':[], 'group':[], 'error': None}
         obj.update(args)
-        i = 0
-        for val in arg:
-            if i > len(key): break
-            obj[key[i]] = val
-            i+=1
         return {
             'url': str(obj['url']), 
             'middleware': obj['middleware'], 
+            'errorHandler': obj['error'], 
             'sub': [x for x in obj['group']]
         }
+
     #respond for ws
     def route(self, *arg, **args):
-        key = ('url', 'controller', 'method', 'middleware', 'respond', )
-        obj = {'url':'/', 'controller':None, 'method':['get', 'post'], 'middleware':[], 'respond':None}
+        obj = {
+            'url':'/', 'controller':None, 'method':['get', 'post'], 'middleware':[], 'respond':None, 'error': None
+        }
         obj.update(args)
-        i = 0
-        for val in arg:
-            if i > len(key): break
-            obj[key[i]] = val
-            i+=1
         return {
             'url': str(obj['url']), 
             'controller': str(obj['controller']), 
             'methods': obj['method'], 
             'middleware': obj['middleware'], 
+            'errorHandler': obj['error'], 
             "respond": obj['respond'] if not obj['respond'] else str(obj['respond'])
         }
-    def jsonToRoute(self, objs):
+
+    def objToRoute(self, objs):
         result = []
         for obj in objs:
             if 'group' in obj:
-                obj['group'] = self.jsonToRoute(obj['group'])
+                obj['group'] = self.objToRoute(obj['group'])
                 result.append(self.group(**obj))
             else:
                 result.append(self.route(**obj))
@@ -49,6 +43,7 @@ class Router:
             #"get": {"controller": ..., middleware: []},
             #"post": {},
             #"ws": {},
+            'errorHandler': None
         }
         self.sub = {
             #"sub_url": router
@@ -56,7 +51,9 @@ class Router:
         self.sub_regrex = [
             #(regex, variables, router, ) # regex = reroute
         ]
-    def search(self, url, method='get', isGetRespond = False):
+    
+    # return (mw, ctrl, )
+    def search(self, url, method='get', isGetRespond = False, errorHandler = None):
         if type(url) == str:
             method = method.lower()
             url = url.split('/')
@@ -65,19 +62,28 @@ class Router:
                     url.remove('')
                 except:
                     break
+        if self.methods["errorHandler"]:
+            errorHandler = self.methods["errorHandler"]
+        tmp = ([], None, {}, errorHandler)
         if len(url) == 0:
             if method in self.methods:
+                tmp = (
+                    self.methods[method]['middleware'], 
+                    self.methods[method]['controller'], 
+                    {}, 
+                    errorHandler
+                )
                 if isGetRespond:
-                    return self.methods[method]['middleware'], self.methods[method]['controller'], {}, self.methods[method]['respond']
+                    return tmp + (self.methods[method]['respond'], )
                 else:
-                    return self.methods[method]['middleware'], self.methods[method]['controller'], {}
-            else: return ([], None, {}, None) if isGetRespond else ([], None, {})
+                    return tmp
+            else: return tmp + (None,) if isGetRespond else tmp
+        
         current_url = url.pop(0)
         if current_url in self.sub:
-            result = self.sub[current_url].search(url, method, isGetRespond=isGetRespond)
-            if result[1]: #found
-                return result
-        
+            result = self.sub[current_url]["router"].search(url, method, isGetRespond, errorHandler)
+            return result
+
         for regex,variables,_router in self.sub_regrex:
             matchObj = re.match('^'+regex+'$', current_url)
             if matchObj:
@@ -86,18 +92,23 @@ class Router:
                 for key in variables:
                     i+=1
                     data[key] = matchObj.group(i)
-                result = _router.search(url, method, isGetRespond=isGetRespond)
+                result = _router.search(url, method, isGetRespond, errorHandler)
                 if result[1]: #found
                     result[2].update(data)
-                    return result
-        return ([], None, {}, None) if isGetRespond else ([], None, {})
+                return result
+        return tmp + (None,) if isGetRespond else tmp
         
-    def createRoute(self, url, methods, controller, middleware, respond = None):
+    def createRoute(self, url, methods, controller, middleware, errorHandler = None, respond = None):
         if len(url) == 0:
+            self.methods['errorHandler'] = errorHandler
             for method in methods:
                 method = method.lower()
                 if not method in self.methods:
-                    self.methods[method] = {'controller': controller, 'middleware': [], 'respond': respond}
+                    self.methods[method] = {
+                        'controller': controller, 
+                        'middleware': [], 
+                        'respond': respond
+                    }
                 for mw in self.methods[method]['middleware']:
                     if mw in middleware:
                         middleware.remove(mw)
@@ -138,11 +149,11 @@ class Router:
                 regex = re.sub(r'{[^{}?]+\??([^{}]+({\d+\,?\d*})?)*}', dashrepl, regex_current_url)
                 tmp = (regex, variables, Router())
                 self.sub_regrex.append(tmp)
-                tmp[2].createRoute(url, methods, controller, middleware, respond)
+                tmp[2].createRoute(url, methods, controller, middleware, errorHandler, respond)
             else:
                 if not current_url in self.sub:
-                    self.sub[current_url] = Router()
-                self.sub[current_url].createRoute(url, methods, controller, middleware, respond)
+                    self.sub[current_url] = {"router": Router(), "errorHandler": errorHandler}
+                self.sub[current_url]["router"].createRoute(url, methods, controller, middleware, errorHandler, respond)
         return self
 
 class BaseRoute:
@@ -161,8 +172,10 @@ class BaseRoute:
 
     def generateRoute(self, route_config):
         self.group(route_config)
-    def group(self, route_config, parent_url = '/', conf_middleware=[]):
+    def group(self, route_config, parent_url = '/', conf_middleware=[], errorHandler = None):
         for conf in route_config:
+            if "errorHandler" in conf and conf['errorHandler']:
+                errorHandler = self.controllerToCallable(conf['errorHandler'])
             if "controller" in conf:
                 url_arr = (parent_url+'/'+conf['url']).split('/')
                 while True:
@@ -176,12 +189,13 @@ class BaseRoute:
                     mw = self.middlewareToCallable(mw)
                     if mw not in middleware:
                         middleware.append(mw)
-                self.router.createRoute(url_arr, conf['methods'], controller, middleware, conf['respond'])
+                self.router.createRoute(url_arr, conf['methods'], controller, middleware, errorHandler, conf['respond'])
             elif "sub" in conf:
                 self.group(
                     conf['sub'], 
                     (parent_url+'/'+conf['url']), 
-                    conf_middleware+(conf['middleware'] if 'middleware' in conf else [])
+                    conf_middleware+(conf['middleware'] if 'middleware' in conf else []),
+                    errorHandler
                 )
     def controllerToCallable(self, controller):
         if type(controller) == str:

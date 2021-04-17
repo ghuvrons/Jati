@@ -1,5 +1,5 @@
 import datetime
-import Jati.Database.MySQL.Query as Query
+
 class ListOfModels():
     def __init__(self, models = []):
         self.models = models
@@ -35,37 +35,71 @@ class ModelsAsObject(object):
         for key in self.__attributtes.keys():
             self.__attributtes[key].save()
 
+class ModelIterator:
+    def __init__(self, model_class, query):
+        self.model_class = model_class
+        self.query = query
+        self.result = None
+        self.i = -1
+
+    def limit(self, num, offset = 0):
+        self.query = self.query.select(
+            asDictionary = True,
+            limit = (offset, num),
+            isExecute = False
+        )
+        return self
+
+    def page(self, num, limit = 20):
+        offset = limit*(num-1)
+        self.query = self.query.select(
+            asDictionary = True,
+            limit = (offset, limit),
+            isExecute = False
+        )
+        return self
+
+    def __iter__(self):
+        self.result = self.query.getResult()
+        return self
+
+    def __next__(self):
+        if self.result:
+            data = self.result.__next__()
+            if data:
+                return self.model_class.createFromDict(data, False)
+        raise StopIteration
+
 class Model(object):
     DB = None
     TABLE = None
+    PRIMARY_KEY = 'id'
+    WHERE = {}
     Databases = {}
     Log = None
 
-    def __init__(self):
-        self._primary_key = "id"
+    def __init__(self, *arg, **kw):
         self.__id = None
         self.__updated__attr = {}
         self.__attributtes = self._attributtes()
         self.__relations = {}
         self.__generate__attrs()
 
+        for key in kw.keys():
+            setattr(self, key, kw[key])
+
     @classmethod
-    def create(this_class, *arg, **args):
-        model = this_class()
-        for key in args.keys():
-            setattr(model, key, args[key])
+    def create(this_class, *arg, **kw):
+        model = this_class(*arg, **kw)
         return model
 
     @classmethod
     def createFromDict(this_class, args, is_new = True):
-        model = this_class()
-        for key in args.keys():
-            # if key in attrs:
-            setattr(model, str(key), args[key])
+        model = this_class(**args)
         if not is_new:
             model.__updated__attr = {}
-            if model._primary_key in args.keys():
-                model.__id = args[model._primary_key]
+            if this_class.PRIMARY_KEY in args.keys():
+                model.__id = args[this_class.PRIMARY_KEY]
         return model
 
     @classmethod
@@ -74,24 +108,29 @@ class Model(object):
         _where = []
         for key in args.keys():
             _where.append((key, args[key], ))
-        results = db[this_class.TABLE].select(asDictionary = True, 
+        for key in this_class.WHERE.keys():
+            _where.append((key, this_class.WHERE[key], ))
+        results = db[this_class.TABLE].select(
             where=_where, 
             limit=1
         )
         model = None
-        for r in results:
-            model = this_class.createFromDict(r, False)
+        if results:
+            for r in results:
+                model = this_class.createFromDict(r, False)
         return model
 
     @classmethod
     def all(this_class):
         db = this_class.Databases[this_class.DB]
-        results = db[this_class.TABLE].select(asDictionary = True)
-        models_list = []
-        for r in results:
-            model = this_class.createFromDict(r, False)
-            models_list.append(model)
-        return models_list
+        _where = []
+        for key in this_class.WHERE.keys():
+            _where.append((key, this_class.WHERE[key], ))
+        query = db[this_class.TABLE].select(
+            where = _where,
+            isExecute = False
+        )
+        return ModelIterator(this_class, query)
         
     @classmethod
     def search(this_class, *arg, **args):
@@ -99,19 +138,20 @@ class Model(object):
         _where = []
         for key in args.keys():
             _where.append((key, args[key], ))
-        results = db[this_class.TABLE].select(asDictionary = True, 
-            where=_where
+        for key in this_class.WHERE.keys():
+            _where.append((key, this_class.WHERE[key], ))
+        query = db[this_class.TABLE].select(
+            where = _where,
+            isExecute = False
         )
-        models_list = []
-        for r in results:
-            model = this_class.createFromDict(r, False)
-            models_list.append(model)
-        return models_list
+        return ModelIterator(this_class, query)
     
     def _attributtes(self):
         return {}
 
     def __setattr__(self, name, value):
+        if name in self.WHERE:
+            value = self.WHERE[name]
         if (hasattr(self, "_Model__attributtes") 
          and name in self.__attributtes 
          and "datatype" in self.__attributtes[name]
@@ -147,10 +187,10 @@ class Model(object):
             if datatype not in ['relation_has_one', 'relation_has_many', 'relation_as_object']:
                 self.__updated__attr[name] = new_value
             return object.__setattr__(self, name, new_value)
-
         return object.__setattr__(self, name, value)
+
     def __getattribute__(self, name):
-        if (name is not '_Model__attributtes'
+        if (name != '_Model__attributtes'
          and hasattr(self, "_Model__attributtes") 
          and name in self.__attributtes 
          and "datatype" in self.__attributtes[name]
@@ -162,7 +202,7 @@ class Model(object):
                     _class_model = self.__attributtes[name]["class_model"]
                     _where = {}
                     for key in _on.keys():
-                        _where[_on[key]] = self.__id
+                        _where[_on[key]] = self.__getattribute__(key)
                     model = _class_model.one(**_where)
                     object.__setattr__(self, name, model)
             elif datatype == 'relation_has_many':
@@ -171,9 +211,9 @@ class Model(object):
                     _class_model = self.__attributtes[name]["class_model"]
                     _where = {}
                     for key in _on.keys():
-                        _where[_on[key]] = self.__id
+                        _where[key] = self.__getattribute__(_on[key])
                     models = _class_model.search(**_where)
-                    object.__setattr__(self, name, ListOfModels(models))
+                    object.__setattr__(self, name, models)
             elif datatype == 'relation_as_object':
                 if object.__getattribute__(self, name) == None:
                     _on = self.__attributtes[name]["on"]
@@ -189,10 +229,11 @@ class Model(object):
                         )
                     )
         return object.__getattribute__(self, name)
+
     def __generate__attrs(self):
         _attrs = self.__attributtes
-        if self._primary_key in _attrs.keys():
-            _attrs[self._primary_key]['primary'] = True
+        if self.PRIMARY_KEY in _attrs.keys():
+            _attrs[self.PRIMARY_KEY]['primary'] = True
         for _key in _attrs.keys():
             if _attrs[_key]["datatype"] == 'relation':
                 self.__relations[_key] = {
@@ -200,24 +241,25 @@ class Model(object):
                     "data": []
                 }
             setattr(self, _key, _attrs[_key]["default"] if "default" in _attrs[_key] else None)
+            
     def save(self):
         db = self.Databases[self.DB][self.TABLE]
         if self.__id is None:
             result = db.insert(self.__updated__attr)
             if result is not None:
                 self.__id = result.result
-                self.__setattr__(self._primary_key, self.__id)
+                self.__setattr__(self.PRIMARY_KEY, self.__id)
                 return result.result
         else:
             result = db.update(self.__updated__attr,
-                where=[(self._primary_key, self.__id)]
+                where=[(self.PRIMARY_KEY, self.__id)]
             )
             return result.result
     
     def delete(self):
         db = self.Databases[self.DB][self.TABLE]
         if self.__id is not None:
-            result = db.delete(where=[(self._primary_key, self.__id)])
+            result = db.delete(where=[(self.PRIMARY_KEY, self.__id)])
             if result is not None:
                 return True
 

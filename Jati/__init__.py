@@ -37,7 +37,7 @@ class SettingHandler(threading.Thread, SocketFileSVR):
         self.cmd(sock, command[0], app)
 
 class Jati:
-    def __init__(self, host = "127.0.0.1", port=3000, isSSL = False):
+    def __init__(self, host = "127.0.0.1", port=3000, isSSL = False, log_file = None):
         self.applications = {}
         self.server = None
         self.host = host
@@ -45,8 +45,8 @@ class Jati:
         self.isSSL = isSSL
         main_module = sys.modules["__main__"]
         self.main_path = os.path.dirname(os.path.abspath(main_module.__file__))
-        self.log_file = self.main_path+"/Log/run.log"
-        self.log = Log('Jati', filepath=self.log_file)
+        self.log_file = log_file
+        self.log = Log('Jati', filepath=log_file)
     def start(self):
         # self.setting = SettingHandler(self.main_path+"/setting.sock")
         # self.setting.cmd = self.cmd
