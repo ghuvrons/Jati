@@ -141,27 +141,25 @@ class HTTPHandler(BaseHTTPRequestHandler):
             auth_type, auth_token = auth_token.split(" ", 1)
             self.auth = self.app.authHandler.authenticate(auth_type, auth_token, auth=self.auth)
 
-    def runMiddleWare(self, method, middleware):
+    def runMiddleWare(self, method, middlewares):
         middleware_has_run = []
         cookies = self.app.Session.get_cookies(self)
         if self.session and ("PySessID" in cookies and self.session.id != cookies["PySessID"]):
             self.session = None
-        for mw in middleware:
-            if not mw and mw in middleware_has_run:
-                continue
-            middleware_has_run.append(mw)
-            mw_arg_len = len(signature(mw)._parameters)
-            if mw_arg_len == 2:
-                self.session = self.session if self.session else self.app.Session.create(self)
-                if not mw(self, self.session):
-                    raise HTTPError(500)
-            elif mw_arg_len == 1:
-                if not mw(self):
-                    raise HTTPError(500)
+        for middleware in middlewares:
+            if getfullargspec(middleware).varkw is None:
+                if not middleware():
+                    raise HTTPError(400)
             else:
-                if not mw():
-                    raise HTTPError(500)
-    
+                kw = {
+                    "request": self._request,
+                    "respond": self._respond,
+                    "session": None,
+                    "auth": self.auth
+                }
+                if not middleware(**kw):
+                    raise HTTPError(400)
+
     def runController(self, controller):
         if getfullargspec(controller).varkw is None:
             response_message = controller()
