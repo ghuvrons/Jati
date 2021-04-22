@@ -244,17 +244,18 @@ class Model(object):
             
     def save(self):
         db = self.Databases[self.DB][self.TABLE]
+        if not self.__updated__attr: return False
         if self.__id is None:
             result = db.insert(self.__updated__attr)
             if result is not None:
-                self.__id = result.result
+                self.__id = result.lastid
                 self.__setattr__(self.PRIMARY_KEY, self.__id)
-                return result.result
+                return (result.error is None)
         else:
             result = db.update(self.__updated__attr,
                 where=[(self.PRIMARY_KEY, self.__id)]
             )
-            return result.result
+            return (result.error is None)
     
     def delete(self):
         db = self.Databases[self.DB][self.TABLE]

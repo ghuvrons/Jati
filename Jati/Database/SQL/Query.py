@@ -188,10 +188,7 @@ class Query:
             return self.db.execute(self)
     
     def getResult(self):
-        if not self.isExecuted:
-            return self
-        if self.isSelectQuery:
-            return self.db.execute(self)
+        return self.db.execute(self)
 
     @staticmethod
     def colomnIdentity(col):

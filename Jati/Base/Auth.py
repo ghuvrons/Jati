@@ -1,5 +1,4 @@
-# import jwt
-import base64
+import base64, hashlib, binascii, os
 
 # Auth has user
 class Auth:
@@ -11,7 +10,7 @@ class Auth:
 
     def generateToken(self):
         if self.user is not None:
-            return self.user.__getattribute__(self.user.ACCESS_TOKEN_COL)
+            return self.user.generateToken()
         return None
 
 class AuthHandler:
@@ -37,9 +36,6 @@ class AuthHandler:
         auth.user = user
         return auth
 
-# class AuthRole:
-
-
 class AuthModel:
     ACCESS_TOKEN_COL = "access_token"
 
@@ -51,6 +47,14 @@ class AuthModel:
     @classmethod
     def authenticateByToken(cls, token):
         return cls.one(**{cls.ACCESS_TOKEN_COL:token})
+        
+    def generateToken(self):
+        token = getattr(self, self.ACCESS_TOKEN_COL)
+        if token is None:
+            token = hashlib.sha256(os.urandom(64)).hexdigest()
+            setattr(self, self.ACCESS_TOKEN_COL, token)
+            self.save()
+        return token
         
     def can(self):
         return True
