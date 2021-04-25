@@ -38,6 +38,8 @@ class Model(object):
 
         for key in kw.keys():
             setattr(self, key, kw[key])
+        
+        self._unSetUpdatedAttr()
 
     def _attributtes(self):
         return {}
@@ -45,13 +47,30 @@ class Model(object):
     def _getUpdatedAttr(self):
         new_data = self.__updated__attr
         for attr in self.__attributtes:
+            if attr in self.__updated__attr: continue
             if self.__attributtes[attr]['datatype'] == 'dict':
                 object_model = getattr(self, attr, None)
                 if object_model:
                     object_new_data = object_model._getUpdatedAttr()
                     for object_key in object_new_data:
                         new_data[attr+"."+object_key] = object_new_data[object_key]
+        # check typedata
+        for attr in new_data:
+            new_value = new_data[attr]
+            if type(new_value) is ModelObject:
+                new_value = dict(new_value)
+            elif type(new_value) is ModelList:
+                new_value = list(new_value)
+            else: continue
+            new_data[attr] = new_value
         return new_data
+    
+    def _unSetUpdatedAttr(self):
+        self.__updated__attr = {}
+        for attr in self.__attributtes:
+            if self.__attributtes[attr]['datatype'] == 'dict':
+                object_model = getattr(self, attr, None)
+                if object_model: object_model._unSetUpdatedAttr()
     
     def save(self):
         db = self.Databases[self.DB][self.COLLECTION]
@@ -62,18 +81,30 @@ class Model(object):
                 setattr(self, self.PRIMARY_KEY, self.__id)
                 return True
         else:
-            updated_data = {}
-            result = db.update_one(self.__updated__attr,
-                where=[(self.PRIMARY_KEY, self.__id)]
+            updated_data = self._getUpdatedAttr()
+            if not updated_data: return False
+
+            result = db.update_one(
+                {self.PRIMARY_KEY: {"$eq": self.__id}},
+                {"$set": updated_data}
             )
-            return result.result
+            modified_count = result.modified_count
+            if modified_count == 0:
+                return False
+
+            # unset updated attribute
+            self._unSetUpdatedAttr()
+
+            return modified_count
 
     def delete(self):
         db = self.Databases[self.DB][self.COLLECTION]
         if self.__id is not None:
-            result = db.delete(where=[(self.PRIMARY_KEY, self.__id)])
-            if result is not None:
-                return True
+            result = db.delete_one({self.PRIMARY_KEY: {"$eq": self.__id}})
+            deleted_count = result.deleted_count
+            if deleted_count == 0:
+                return False
+            return True
 
     def __generate__attrs(self):
         _attrs = self.__attributtes
@@ -142,7 +173,7 @@ class Model(object):
                     )
                     new_value.DB = self.DB
                     new_value.COLLECTION = self.COLLECTION
-            if datatype not in ['list', 'dict']:
+            if datatype not in ['list', 'dict'] or new_value is not None:
                 self.__updated__attr[name] = new_value
             return object.__setattr__(self, name, new_value)
         return object.__setattr__(self, name, value)
@@ -165,7 +196,6 @@ class Model(object):
     def createFromDict(this_class, args, is_new = True):
         model = this_class(**args)
         if not is_new:
-            model.__updated__attr = {}
             if this_class.PRIMARY_KEY in args.keys():
                 model.__id = args[this_class.PRIMARY_KEY]
         return model
