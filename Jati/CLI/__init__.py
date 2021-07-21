@@ -21,10 +21,16 @@ def start(host, port, site, log, ssl):
     serve.run(host=host, port=port, sites=sites, log_file=log, isSSL=ssl)
 
 @main.command('generate:controller')
-def generate_ctrl():
-    click.echo('Generating controller')
+@click.argument('filename')
+@click.option('-s', '--site', type=(str, str))
+def generate_ctrl(site, filename):
+    gen = Generator(site)
+
+    click.echo('Generating controller in '+ site)
+    gen.generateController(filename)
 
 @main.command('generate:middleware')
+@click.argument('filename')
 def generate_mw():
     click.echo('Generating middleware')
 
@@ -35,3 +41,9 @@ def generate_model():
 @main.command('generate:service')
 def generate_srv():
     click.echo('Generating service')
+
+@main.command('generate:project')
+@click.option('-s', '--site', type=str)
+def generate_srv(site):
+    click.echo('Generating project')
+    Generator(site).generateProject()
