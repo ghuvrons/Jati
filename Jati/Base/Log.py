@@ -1,4 +1,4 @@
-import logging, sys, datetime
+import logging, os, sys, datetime
 from logging.handlers import TimedRotatingFileHandler
 FORMATTER = logging.Formatter("%(asctime)s [%(levelname)s]: %(message)s")
 
@@ -22,6 +22,9 @@ class Log:
         if filepath == None:
             self.logger.addHandler(get_console_handler())
         else:
+            dirname = os.path.dirname(filepath)
+            if not os.path.isdir(dirname):
+                os.mkdir(dirname)
             self.logger.addHandler(get_file_handler(filepath))
         self.logger.propagate = False
     
