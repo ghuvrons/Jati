@@ -48,7 +48,7 @@ class Model(object):
         new_data = self.__updated__attr
         for attr in self.__attributtes:
             if attr in self.__updated__attr: continue
-            if self.__attributtes[attr]['datatype'] == 'dict':
+            if self.__attributtes[attr]['datatype'] == 'dict' and self.__attributtes[attr]['got_data']:
                 object_model = getattr(self, attr, None)
                 if object_model:
                     object_new_data = object_model._getUpdatedAttr()
@@ -68,7 +68,7 @@ class Model(object):
     def _unSetUpdatedAttr(self):
         self.__updated__attr = {}
         for attr in self.__attributtes:
-            if self.__attributtes[attr]['datatype'] == 'dict':
+            if self.__attributtes[attr]['datatype'] == 'dict' and self.__attributtes[attr]['got_data']:
                 object_model = getattr(self, attr, None)
                 if object_model: object_model._unSetUpdatedAttr()
     
@@ -119,12 +119,64 @@ class Model(object):
             if self.__attributtes[attr]['datatype'] == 'dict':
                 yield (attr, dict(getattr(self, attr)))
             elif self.__attributtes[attr]['datatype'] == 'list':
-                yield (attr, list(getattr(self, attr)))
+                tmp_data = list(getattr(self, attr))
+                list_data = []
+                for d in tmp_data:
+                    if type(d) is ModelObject:
+                        list_data.append(dict(d))
+                    elif type(d) is ModelList:
+                        list_data.append(list(d))
+                    else:
+                        list_data.append(d)
+                yield (attr, list_data)
             elif attr == self.PRIMARY_KEY:
                 if self.__id is not None:
                     yield (attr, getattr(self, attr))
             else:
                 yield (attr, getattr(self, attr))
+    
+    def _format_data(self, value, model_datatype, name=None):
+        datatype = model_datatype['datatype']
+        new_value = None
+        if value is None:
+            new_value = value
+        elif datatype == 'int':
+            new_value = int(value)
+        elif datatype == 'float':
+            new_value = float(value)
+        elif datatype == 'str':
+            new_value = str(value)
+        elif datatype == 'object_id':
+            if value is None:
+                new_value = ObjectId()
+            elif type(value) is bytes:
+                new_value = ObjectId(value)
+            elif type(value) is str:
+                new_value = ObjectId(bytes(value))
+            else:
+                new_value = value
+        elif datatype == 'date':
+            if type(value) is str:
+                new_value = datetime.datetime.strptime(value, '%Y-%m-%d').date()
+            elif type(value) is int:
+                new_value = datetime.date.fromtimestamp(value)
+            elif type(value) is datetime.date:
+                new_value = value
+            else:
+                new_value = None
+        elif datatype == 'list':
+            if type(value) is list:
+                new_value = ModelList(value, model_datatype["listof"], self)
+        elif datatype == 'dict':
+            if type(value) is dict:
+                new_value = ModelObject(
+                    name,
+                    model_datatype["attributes"], 
+                    **value
+                )
+                new_value.DB = self.DB
+                new_value.COLLECTION = self.COLLECTION
+        return new_value
 
     def __setattr__(self, name, value):
         if name in self.WHERE:
@@ -134,47 +186,10 @@ class Model(object):
          and "datatype" in self.__attributtes[name]
         ):
             datatype = self.__attributtes[name]["datatype"]
-            new_value = None
-            if value is None:
-                new_value = value
-            elif datatype == 'int':
-                new_value = int(value)
-            elif datatype == 'float':
-                new_value = float(value)
-            elif datatype == 'str':
-                new_value = str(value)
-            elif datatype == 'object_id':
-                if value is None:
-                    new_value = ObjectId()
-                elif type(value) is bytes:
-                    new_value = ObjectId(value)
-                elif type(value) is str:
-                    new_value = ObjectId(bytes(value))
-                else:
-                    new_value = value
-            elif datatype == 'date':
-                if type(value) is str:
-                    new_value = datetime.datetime.strptime(value, '%Y-%m-%d').date()
-                elif type(value) is int:
-                    new_value = datetime.date.fromtimestamp(value)
-                elif type(value) is datetime.date:
-                    new_value = value
-                else:
-                    new_value = None
-            elif datatype == 'list':
-                if type(value) is list:
-                    new_value = ModelList(value)
-            elif datatype == 'dict':
-                if type(value) is dict:
-                    new_value = ModelObject(
-                        name,
-                        self.__attributtes[name]["attributes"], 
-                        **value
-                    )
-                    new_value.DB = self.DB
-                    new_value.COLLECTION = self.COLLECTION
+            new_value = self._format_data(value, self.__attributtes[name], name)
             if datatype not in ['list', 'dict'] or new_value is not None:
                 self.__updated__attr[name] = new_value
+            self.__attributtes[name]['got_data'] = True
             return object.__setattr__(self, name, new_value)
         return object.__setattr__(self, name, value)
 
@@ -184,7 +199,7 @@ class Model(object):
          and name in self.__attributtes 
          and "datatype" in self.__attributtes[name]
         ):
-            datatype = self.__attributtes[name]["datatype"]
+            self.__attributtes[name]['got_data'] = True
         return object.__getattribute__(self, name)
 
     @classmethod
@@ -235,49 +250,56 @@ class Model(object):
     def _integer(default = 0):
         return {
             "datatype" : "int",
-            "default": int(default)
+            "default" : int(default) if default is not None else None,
+            "got_data" : False
         }
 
     @staticmethod
     def _float(default = 0.0):
         return {
             "datatype" : "float",
-            "default": float(default)
+            "default" : float(default) if default is not None else None,
+            "got_data" : False
         }
 
     @staticmethod
     def _string(default = None):
         return {
             "datatype" : "str",
-            "default": str(default) if default else None
+            "default" : str(default) if default is not None else None,
+            "got_data" : False
         }
 
     @staticmethod
     def _date(default = None):
         return {
             "datatype" : "date",
-            "default": default
+            "default" : default,
+            "got_data" : False
         }
 
     @staticmethod
     def _time(default = None):
         return {
             "datatype" : "time",
-            "default": default
+            "default" : default,
+            "got_data" : False
         }
 
     @staticmethod
     def _datetime(default = None):
         return {
             "datatype" : "datetime",
-            "default": default
+            "default" : default,
+            "got_data" : False
         }
 
     @staticmethod
     def _object_id(default = None):
         return {
             "datatype" : "object_id",
-            "default": default
+            "default" : default,
+            "got_data" : False
         }
 
     @staticmethod
@@ -285,7 +307,8 @@ class Model(object):
         return {
             "datatype" : "list",
             "listof" : listof,
-            "default": default
+            "default" : default,
+            "got_data" : False
         }
 
     @staticmethod
@@ -293,7 +316,8 @@ class Model(object):
         return {
             "datatype" : "dict",
             "attributes" : attributes,
-            "default": default
+            "default": default,
+            "got_data" : False
         }
 
 class ModelObject(Model):
@@ -309,16 +333,27 @@ class ModelObject(Model):
     def delete(self): pass
 
 class ModelList:
-    def __init__(self, data): 
+    def __init__(self, data, listof, parent_model = None): 
         self.data = data
-        self.i = -1
+        self.__i = -1
+        self.parent_model = parent_model
+        self.__listof = listof
     
     def __iter__(self):
-        self.i = -1
+        self.__i = -1
         return self
 
     def __next__(self):
-        self.i += 1
-        if self.i >= len(self.data):
+        self.__i += 1
+        if self.__i >= len(self.data):
             raise StopIteration
-        return self.data[self.i]
+        data = self.parent_model._format_data(self.data[self.__i], self.__listof)
+        return data
+    
+    def append(self, data): pass
+
+    def save(self): 
+        parent = self.parent_model
+        parent_id = getattr(parent, parent.PRIMARY_KEY)
+        collection = parent.Databases[parent.DB][parent.COLLECTION]
+        # collection.update_one({parent.PRIMARY_KEY: {"$eq": parent_id}})
