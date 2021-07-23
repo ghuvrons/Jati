@@ -215,7 +215,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         try:
             self.respone_headers = {}
-            req_headers = self.headers["Access-Control-Request-Headers"].replace(' ', '').split(',') if "Access-Control-Request-Method" in self.headers else []
+            req_headers = self.headers["Access-Control-Request-Headers"].replace(' ', '').split(',') if "Access-Control-Request-Headers" in self.headers else []
             req_method = self.headers["Access-Control-Request-Method"] if "Access-Control-Request-Method" in self.headers else None
             origin = self.headers["Origin"]
             allow_headers = ''
