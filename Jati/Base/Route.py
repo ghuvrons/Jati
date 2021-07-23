@@ -1,6 +1,6 @@
 
 from Jati.Base.Controller import Controller as JatiBaseController
-import re
+import re, pprint
 
 class Route:
 
@@ -58,7 +58,7 @@ class Router:
         ]
     
     # search url nestedly in router tree
-    # return tuple : (middleware, middleware, data if regex router, errorHandler, and respond event if websocket route)
+    # return tuple : (middleware, controller, data if regex router, errorHandler, and respond event if websocket route)
     def search(self, url, method='get', isGetRespond = False, errorHandler = None):
         if type(url) == str:
             method = method.lower()
@@ -75,7 +75,7 @@ class Router:
             if method in self.methods:
                 tmp = (
                     self.methods[method]['middleware'], 
-                    self.methods[method]['middleware'], 
+                    self.methods[method]['controller'], 
                     {}, 
                     errorHandler
                 )
@@ -179,6 +179,21 @@ class BaseRoute:
         self.Services = {}
         self.appPath = app_module.__path__[0]
 
+    # print router as object
+    def print(self):
+        pprint.pprint(self.routerToObject(self.router))
+        pass 
+
+    def routerToObject(self, router: Router, url = '/'):
+        result = {
+            "url": url,
+            "methods": router.methods,
+            "sub" : []
+        }
+        for url in router.sub.keys():
+            result['sub'].append(self.routerToObject(router.sub[url], url))
+        return result
+
     # generateRoute is alias of "group"
     def generateRoute(self, route_config):
         self.group(route_config)
@@ -196,6 +211,7 @@ class BaseRoute:
                         url_arr.remove('')
                     except:
                         break
+
                 controller = self.controllerToCallable(conf['controller'])
                 middleware = []
                 for mw in conf_middleware+conf['middleware']:
