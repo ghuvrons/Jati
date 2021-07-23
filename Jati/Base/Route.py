@@ -1,6 +1,5 @@
-
+import re, inspect, pprint
 from Jati.Base.Controller import Controller as JatiBaseController
-import re, pprint
 
 class Route:
 
@@ -70,6 +69,7 @@ class Router:
                     break
         if self.methods["errorHandler"]:
             errorHandler = self.methods["errorHandler"]
+
         tmp = ([], None, {}, errorHandler)
         if len(url) == 0:
             if method in self.methods:
@@ -191,7 +191,7 @@ class BaseRoute:
             "sub" : []
         }
         for url in router.sub.keys():
-            result['sub'].append(self.routerToObject(router.sub[url], url))
+            result['sub'].append(self.routerToObject(router.sub[url]["router"], url))
         return result
 
     # generateRoute is alias of "group"
@@ -237,7 +237,7 @@ class BaseRoute:
                 for c_class_name in controller_class_name:
                     controller_class = getattr(controller_class, c_class_name)
                 
-                if JatiBaseController in controller_class.__bases__:
+                if JatiBaseController in inspect.getmro(controller_class):
                     controller_class.appPath = self.appPath
                     controller_class.Databases = self.Databases
                     controller_class.Models = self.Models

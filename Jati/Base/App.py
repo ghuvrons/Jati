@@ -2,7 +2,7 @@ from Jati.Base.Log import Log
 from Jati.Base.Session import SessionHandler
 from Jati.Base.Route import BaseRoute, Route
 from Jati.Base.Auth import AuthHandler
-import sys, os, json, ssl
+import sys, json, ssl
 
 class App:
     def __init__(self, app_module, config = {}):
@@ -33,6 +33,9 @@ class App:
         wsRouter.Modules = self.Modules
         wsRouter.Services = self.Services
         wsRouter.generateRoute(self.route_config['ws'])
+
+        # httpRouter.print()
+
         self.route = {
             "http": httpRouter.router,
             "ws": wsRouter.router
