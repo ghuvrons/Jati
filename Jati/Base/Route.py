@@ -1,7 +1,10 @@
 
-import re, json
+from Jati.Base.Controller import Controller as JatiBaseController
+import re
 
 class Route:
+
+    # generate route for prefix url with normal format (it contains default value)
     def group(self, *arg, **args):
         obj = {'url':'/', 'middleware':[], 'group':[], 'error': None}
         obj.update(args)
@@ -12,8 +15,9 @@ class Route:
             'sub': [x for x in obj['group']]
         }
 
-    #respond for ws
+    # generate route for end node route with normal format (it contains default value)
     def route(self, *arg, **args):
+        # key "respond" for ws route
         obj = {
             'url':'/', 'controller':None, 'method':['get', 'post'], 'middleware':[], 'respond':None, 'error': None
         }
@@ -27,6 +31,7 @@ class Route:
             "respond": obj['respond'] if not obj['respond'] else str(obj['respond'])
         }
 
+    # objToRoute convert objs tree object as our format
     def objToRoute(self, objs):
         result = []
         for obj in objs:
@@ -52,7 +57,8 @@ class Router:
             #(regex, variables, router, ) # regex = reroute
         ]
     
-    # return (mw, ctrl, )
+    # search url nestedly in router tree
+    # return tuple : (middleware, middleware, data if regex router, errorHandler, and respond event if websocket route)
     def search(self, url, method='get', isGetRespond = False, errorHandler = None):
         if type(url) == str:
             method = method.lower()
@@ -69,7 +75,7 @@ class Router:
             if method in self.methods:
                 tmp = (
                     self.methods[method]['middleware'], 
-                    self.methods[method]['controller'], 
+                    self.methods[method]['middleware'], 
                     {}, 
                     errorHandler
                 )
@@ -97,7 +103,8 @@ class Router:
                     result[2].update(data)
                 return result
         return tmp + (None,) if isGetRespond else tmp
-        
+    
+    # createRoute create new Router child
     def createRoute(self, url, methods, controller, middleware, errorHandler = None, respond = None):
         if len(url) == 0:
             self.methods['errorHandler'] = errorHandler
@@ -154,13 +161,15 @@ class Router:
                 if not current_url in self.sub:
                     self.sub[current_url] = {"router": Router(), "errorHandler": errorHandler}
                 self.sub[current_url]["router"].createRoute(url, methods, controller, middleware, errorHandler, respond)
-        return self
 
+# Every Jati App has 2 BaseRoute instance. There are for http route and ws route.
+# see App class for detail
 class BaseRoute:
     controllerCache = {}
     middlewareCache = {}
+
     def __init__(self, app_module, isWsRoute = False):
-        self.router = Router()
+        self.router = Router() # this is main router
         self.isWsRoute = isWsRoute
         self.Controller = app_module.Controller
         self.Middleware = app_module.Middleware
@@ -170,8 +179,12 @@ class BaseRoute:
         self.Services = {}
         self.appPath = app_module.__path__[0]
 
+    # generateRoute is alias of "group"
     def generateRoute(self, route_config):
         self.group(route_config)
+
+    # group will generate router tree from route_config
+    # route_config is array tree of Route data. see Route class
     def group(self, route_config, parent_url = '/', conf_middleware=[], errorHandler = None):
         for conf in route_config:
             if "errorHandler" in conf and conf['errorHandler']:
@@ -197,6 +210,8 @@ class BaseRoute:
                     conf_middleware+(conf['middleware'] if 'middleware' in conf else []),
                     errorHandler
                 )
+    
+    # controllerToCallable can return None callable function or instance of controller
     def controllerToCallable(self, controller):
         if type(controller) == str:
             controller = controller.split('@', 1)
@@ -205,17 +220,24 @@ class BaseRoute:
                 controller_class = self.Controller
                 for c_class_name in controller_class_name:
                     controller_class = getattr(controller_class, c_class_name)
-                controller_class.appPath = self.appPath
-                controller_class.Databases = self.Databases
-                controller_class.Models = self.Models
-                controller_class.Services = self.Services
-                self.controllerCache[controller[0]] = controller_class()
+                
+                if JatiBaseController in controller_class.__bases__:
+                    controller_class.appPath = self.appPath
+                    controller_class.Databases = self.Databases
+                    controller_class.Models = self.Models
+                    controller_class.Services = self.Services
+                    self.controllerCache[controller[0]] = controller_class()
 
-            return getattr(self.controllerCache[controller[0]], controller[1])
+            if controller[0] in self.controllerCache:
+                if len(controller) > 1:
+                    return getattr(self.controllerCache[controller[0]], controller[1])
+                else:
+                    return self.controllerCache[controller[0]]
+
         elif callable(controller):
             return controller
         return None
-    
+
     def middlewareToCallable(self, middleware):
         if type(middleware) is str:
             middleware = middleware.split('@', 1)
@@ -230,7 +252,8 @@ class BaseRoute:
                 middleware_class.Models = self.Models
                 middleware_class.Services = self.Services
                 self.middlewareCache[middleware[0]] = middleware_class()
-            return getattr(self.middlewareCache[middleware[0]], middleware[1])
+            if middleware[0] in self.middlewareCache and len(middleware) > 1:
+                return getattr(self.middlewareCache[middleware[0]], middleware[1])
         elif callable(middleware):
             return middleware
         return None
