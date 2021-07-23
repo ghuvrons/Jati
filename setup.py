@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="Jati",
-    version="0.0.2",
+    version="0.1.0",
     author="Janoko",
     author_email="janoko@sandhika.com",
     description="Jati merupakan modul python untuk restAPI dan websocket",

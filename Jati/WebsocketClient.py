@@ -1,74 +1,65 @@
 import socket
 import base64
 import struct
-import time
-import random
 import json
-import os, select
 import traceback
 from hashlib import sha1
 from ssl import SSLError
+from typing import BinaryIO
+from Jati.HTTPRequest import HTTPRequest
+from Jati.HTTPResponse import HTTPResponse
 
-class ClientHandler():
+class WebsocketClient():
     STATUS = {
         "SUCCESS" : 0x01,
         "SERVER_ERROR" : 0x81
     }
-    def __init__(self, HTTPReqHandler):
-        self.HTTPReqHandler = HTTPReqHandler
-        self.addr = HTTPReqHandler.client_address
+    def __init__(self):
+        self.rfile: BinaryIO = None
+        self.wfile: BinaryIO = None
         self.hostname = None
         self.protocol = ''
         self.message = [b'']
         self.closed = False
         self.session_id = None
         self.session = None
-        self.log = self.HTTPReqHandler.app.Log
         self.events = {
             "close": []
         }
-    #handsacking return protocol
-    def handsacking(self):
-        origin = self.HTTPReqHandler.headers.get("Origin")
-        try:
-            if origin in self.HTTPReqHandler.app.config["Access-Control-Allow"]["Origins"]:
-                self.HTTPReqHandler.set_respone_header('Access-Control-Allow-Origin', origin)
-        except:
-            pass
-        try:
-            if self.HTTPReqHandler.app.config["Access-Control-Allow"]["Credentials"]:
-                self.HTTPReqHandler.set_respone_header('Access-Control-Allow-Credentials', "true")
-        except:
-            pass
+    
+    #handsacking return response header
+    def handsacking(self, request: HTTPRequest, response: HTTPResponse):
+        # generate hash key from request key
+        key = request.headers.get('Sec-WebSocket-Key', '')
+        response.set_header('Sec-WebSocket-Accept', self.hash_key(key))
+
+        protocol = request.headers.get('Sec-WebSocket-Protocol', None)
+        version = request.headers.get('Sec-WebSocket-Version')
         
-        key = self.HTTPReqHandler.headers.get('Sec-WebSocket-Key', '')
-        acc = self.hashKey(key)
-        protocol = self.HTTPReqHandler.headers.get('Sec-WebSocket-Protocol')
-        version = self.HTTPReqHandler.headers.get('Sec-WebSocket-Version')
-        
-        self.HTTPReqHandler.set_respone_header('Upgrade', "WebSocket")
-        self.HTTPReqHandler.set_respone_header('Connection', "Upgrade")
-        
-        self.HTTPReqHandler.set_respone_header('Sec-WebSocket-Accept', acc)
+        response.set_header('Upgrade', "WebSocket")
+        response.set_header('Connection', "Upgrade")
+        response.set_header('Server', "Python-Websocket-Janoko")
         if protocol:
-            self.HTTPReqHandler.set_respone_header('Sec-WebSocket-Protocol', protocol)
-        self.HTTPReqHandler.set_respone_header('Server', "Python-Websocket-Janoko")
+            response.set_header('Sec-WebSocket-Protocol', protocol)
         
-        self.HTTPReqHandler.send_response_message(101, header_message = "Switching Protocols")
         if protocol:
             self.protocol = protocol
         else:
             self.protocol = None
-        return True
+        
+        request.connection.settimeout(1000)
+        self.addr = request.client_address
+        self.rfile = request.rfile
+        self.wfile = request.wfile
 
-    def hashKey(self, key):
+    def hash_key(self, key):
         guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
         combined = (key + guid).encode('UTF-8')
         hashed = sha1(combined).digest()
         result = base64.b64encode(hashed).decode('UTF-8')
         return result
     
-    def intToBytes(self, i):
+    def int_to_bytes(self, i):
         flag = 0
         b = b''
         if i < 126:
@@ -88,14 +79,14 @@ class ClientHandler():
             b += l
         return b
 
-    def decodeMessage(self, data):
+    def decode_message(self, data):
         if len(self.message) != 3:
             self.message[0] += data
             data = self.message[0]
             lid = len(data)
             
             if data[0] == 136:
-                self.HTTPReqHandler.close()
+                self.close()
                 return
             if lid < 6: # 1 + 1 + 4 (? + l_data + mask)
                 return
@@ -131,15 +122,15 @@ class ClientHandler():
             if j == 4:
                 j = 0
                 
-        self.onMessage(msg.decode('UTF8'))
+        self.on_message(msg.decode('UTF8'))
         if self.message[2][self.message[0]:] == b'':
             self.message = [b'']
         else:
             data = self.message[2][self.message[0]:]
             self.message = [b'']
-            self.decodeMessage(data)
+            self.decode_message(data)
 
-    def sendMessage(self, s, binary = False):
+    def send_message(self, s, binary = False):
         """
         Encode and send a WebSocket message
         """
@@ -160,27 +151,30 @@ class ClientHandler():
 
         # How long is our payload?
         length = len(payload)
-        message += self.intToBytes(length)
+        message += self.int_to_bytes(length)
 
         # Append payload to message
         message += payload
 
         # Send to the client
-        self.HTTPReqHandler.connection.send(message)
+        self.wfile.write(message)
 
-    def sendRespond(self, respMessage, status = 200, respData = None):
+    def send_respond(self, respMessage, status = 200, respData = None):
         resp = {
             "respond": respMessage,
             "status": status,
             "data": respData
         }
         
-        self.sendMessage(json.dumps(resp))
+        self.send_message(json.dumps(resp))
         
-    def onNew(self):
+    def on_new(self):
         pass
 
-    def onMessage(self, msg):
+    def on_message(self, msg):
+        pass
+
+    def on_close(self):
         pass
 
     def on(self, event, _f):
@@ -192,31 +186,29 @@ class ClientHandler():
                 _f(self)
             except Exception:
                 g = traceback.format_exc()
-                self.log.error(g)
-        self.HTTPReqHandler.close()
+                # self.log.error(g)
+        self.on_close()
 
     def handle(self):
-        if self.handsacking():
-            self.onNew()
-            self.HTTPReqHandler.connection.settimeout(1000)
-            while not self.closed:
-                try:
-                    data = self.HTTPReqHandler.connection.recv(2048)
-                    if not data:
-                        self.close()
-                        break
-                    self.decodeMessage(data)
-                    self.HTTPReqHandler.wfile.flush()
-                except socket.timeout as e:
-                    self.log.error("ws sock: %s", e)
+        self.on_new()
+        while not self.closed:
+            try:
+                data = self.rfile.read(2048)
+                if not data:
                     self.close()
                     break
-                except SSLError as e:
-                    self.log.error("ws sock error ssl: %s", e)
-                    self.close()
-                    break
-                except Exception as e:
-                    g = traceback.format_exc()
-                    self.log.error(g)
-                    self.close_connection = 1
-                    break
+                self.decode_message(data)
+                self.wfile.flush()
+            except socket.timeout as e:
+                # self.log.error("ws sock: %s", e)
+                self.close()
+                break
+            except SSLError as e:
+                # self.log.error("ws sock error ssl: %s", e)
+                self.close()
+                break
+            except Exception as e:
+                g = traceback.format_exc()
+                # self.log.error(g)
+                self.close_connection = 1
+                break

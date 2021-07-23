@@ -1,24 +1,9 @@
-from __future__ import print_function
-from . import Base
-from . import Database
-from .SocketFileSVR import SocketFileSVR
-from .ClientHandler import HTTPHandler
-from .Base.App import App as BaseApp
-from .HTTPServerSan import HTTPServerSan
 import traceback, sys, os, threading, json
+from .SocketFileSVR import SocketFileSVR
+from .Base.App import App as BaseApp
 from .Base.Log import Log
-
-# This must be the first statement before other statements.
-# You may only put a quoted or triple quoted string, 
-# Python comments, other future statements, or blank lines before the __future__ line.
-
-try:
-    import __builtin__
-except ImportError:
-    import builtins as __builtin__
-
-def print(*args, **kwargs):
-    return __builtin__.print(*args, **kwargs)
+from .Server import Server
+from .Client import Client
 
 class SettingHandler(threading.Thread, SocketFileSVR):
     def __init__(self, file_path):
@@ -61,11 +46,11 @@ Log File : {log}
         '''
         print(start_message.format(host = self.host, port = self.port, log = self.log_file))
 
-        HTTPHandler.protocol_version = 'HTTP/1.1'
-        HTTPHandler.isSSL = self.isSSL
-        HTTPHandler.log_message = self.log_info
-        HTTPHandler.log_error = self.log_error
-        self.server = HTTPServerSan(self.host, self.port, HTTPHandler)
+        Client.protocol_version = 'HTTP/1.1'
+        Client.isSSL = self.isSSL
+        Client.log_message = self.log_info
+        Client.log_error = self.log_error
+        self.server = Server(self.host, self.port, Client)
         self.server.applications = self.applications
         self.server.serve_forever()
 
