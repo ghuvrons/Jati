@@ -58,30 +58,29 @@ class SessionHandler(threading.Thread):
                 sesid += str(c)
         return sesid
 
-    def set_key(self, requestHeandler):
+    def generate_key(self):
         session_id = self.generate_id_cookies()
         while session_id in self.sessionList:
             session_id = self.generate_id_cookies()
-        requestHeandler.set_respone_header('Set-Cookie', 'PySessID='+session_id+';path=/')
         return session_id
 
-    def get_cookies(self, requestHeandler):
+    def get_cookies(self, request):
         cookies = {}
-        if 'Cookie' in requestHeandler.headers:
-            for cookies_header in requestHeandler.headers['Cookie'].split('; '):
+        if 'Cookie' in request.headers:
+            for cookies_header in request.headers['Cookie'].split('; '):
                 key, val = cookies_header.split('=', 1)
                 cookies[key] = val
         return cookies
 
-    def create(self, requestHeandler):
-        cookies = self.get_cookies(requestHeandler)
+    def create(self, request, response):
+        cookies = self.get_cookies(request)
         if 'PySessID' in cookies:
             session_id = cookies['PySessID']
-            if not session_id in  self.sessionList:
-                session_id = self.set_key(requestHeandler)
-                self.sessionList[session_id] = Session(session_id)
-            return self.sessionList[session_id]
-        session_id = self.set_key(requestHeandler)
+            if session_id in  self.sessionList:
+                return self.sessionList[session_id]
+
+        session_id = self.generate_key()
+        response.set_header('Set-Cookie', 'PySessID='+session_id+';path=/')
         self.sessionList[session_id] = Session(session_id)
         return self.sessionList[session_id]
 

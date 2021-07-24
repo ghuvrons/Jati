@@ -71,7 +71,7 @@ class HTTPClientHandler(BaseHTTPRequestHandler):
         self._request.rfile = self.rfile
         self._request.wfile = self.wfile
         self._request.headers = self.headers
-        self._request.path = self.path
+        self._request.parsePath(self.path)
 
         Apps = self.Applications
         if self.hostname == None:
@@ -124,8 +124,8 @@ class HTTPClientHandler(BaseHTTPRequestHandler):
                 return
                 
             self.on_new_request()
-            method = getattr(self, mname)
-            method()
+            method = getattr(self, mname, None)
+            if method: method()
 
             #actually send the response if not already done.
             self.wfile.flush()

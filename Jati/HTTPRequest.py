@@ -1,4 +1,5 @@
 import json, cgi
+from urllib.parse import urlparse, parse_qs
 from typing import BinaryIO
 from http.client import HTTPMessage
 
@@ -21,8 +22,11 @@ class HTTPRequest:
         self.query_parameters = {}
         self.data = None
 
-    def setHeader(self, headers: HTTPMessage):
-        self.headers = headers
+    def parsePath(self, path: str):
+        url = urlparse(path)
+        self.path = url.path
+        self.query_parameters = parse_qs(url.query)
+
 
     def parseData(self):
         if self.headers is None: return

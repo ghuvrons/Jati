@@ -1,7 +1,8 @@
-import os, json, traceback
-from inspect import getfullargspec
+import os, traceback
+from inspect import getfullargspec, getmro
 from .Error import *
 from .Base.App import App as JatiApp
+from .Base.Controller import Controller as JatiBaseController
 from .HTTPClientHandler import HTTPClientHandler
 from .HTTPRequest import HTTPRequest
 from .HTTPResponse import HTTPResponse
@@ -108,20 +109,30 @@ class Client(HTTPClientHandler):
             middleware, controller, self.parameter, errorHandler = self.app.route['http'].search(self._request.path, method)
             self.run_middleWare(method, middleware)
 
-            # upgrade protocol
-            if 'Sec-WebSocket-Key' in self._request.headers:
-                ws = WebsocketClient(self)
-                self.session = self.app.Session.create(self)
-                ws.handsacking(self._request, self._response)
-                self.send_response_message(101, header_message = "Switching Protocols")
-                ws.on_close = self.close
-                ws.handle()
-                return
-            self.data = None
-
             if not controller:
                 raise HTTPError(404, "Not found")
-            response_message = ""
+
+            # upgrade protocol
+            if 'Sec-WebSocket-Key' in self._request.headers:
+                if hasattr(controller, "_websocket_handler"):
+                    f = getattr(controller, "_websocket_handler")
+                    if f and callable(f):
+                        ws = WebsocketClient()
+                        self.session = self.app.Session.create(self._request, self._response)
+                        ws.handsacking(self._request, self._response)
+                        self.send_response_message(101, header_message = "Switching Protocols")
+                        ws.on_close = self.close
+                        ws.handle()
+                        return
+                    else:
+                        print(controller)
+                        raise HTTPError(404, "Not found")
+
+            self.data = None
+            
+                
+            if JatiBaseController in getmro(controller.__class__):
+                controller = getattr(controller, "_http_handler")
             response_message = self.run_controller(controller)
             self.send_response_message(200, response_message)
 

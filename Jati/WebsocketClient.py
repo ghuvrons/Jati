@@ -9,7 +9,7 @@ from typing import BinaryIO
 from Jati.HTTPRequest import HTTPRequest
 from Jati.HTTPResponse import HTTPResponse
 
-class WebsocketClient():
+class WebsocketClient:
     STATUS = {
         "SUCCESS" : 0x01,
         "SERVER_ERROR" : 0x81
