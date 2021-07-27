@@ -13,35 +13,23 @@ class App:
         self.Modules = {}
         self.Services = {}
         self.Log = Log('Jati.'+app_module.__name__, filepath=self.appPath+"/Log/log.log")
-        self.route_config = {'http': [], 'ws': []}
+        self.route_config = []
         self.authHandler = AuthHandler()
         self.importAppSystem()
+
         httpRouter = BaseRoute(
             self.app_module, 
-            log = self.Log 
-        )
-        wsRouter = BaseRoute(
-            self.app_module, 
-            isWsRoute=True,
             log = self.Log 
         )
         httpRouter.Databases = self.Databases
         httpRouter.Models = self.Models
         httpRouter.Modules = self.Modules
         httpRouter.Services = self.Services
-        httpRouter.generateRoute(self.route_config['http'])
-        wsRouter.Databases = self.Databases
-        wsRouter.Models = self.Models
-        wsRouter.Modules = self.Modules
-        wsRouter.Services = self.Services
-        wsRouter.generateRoute(self.route_config['ws'])
+        httpRouter.generateRoute(self.route_config)
 
         # httpRouter.print()
 
-        self.route = {
-            "http": httpRouter.router,
-            "ws": wsRouter.router
-        }
+        self.route = httpRouter.router
         
         self.default_config = {
             "Session-path" : self.appPath+"/session.pkl",
@@ -146,12 +134,8 @@ class App:
             http_router_json = open(sys.modules[app_mod_name+".Route"].__path__[0]+"/http.json")
             http_router = json.load(http_router_json)
             http_router_json.close()
-            self.route_config['http'] = r.objToRoute(http_router)
+            self.route_config = r.objToRoute(http_router)
 
-            ws_router_json = open(sys.modules[app_mod_name+".Route"].__path__[0]+"/ws.json")
-            ws_router = json.load(ws_router_json)
-            ws_router_json.close()
-            self.route_config['ws'] = r.objToRoute(ws_router)
         except Exception as e:
             self.Log.error("Route error : %s", e)
             pass
