@@ -1,5 +1,7 @@
 import re, inspect, pprint
+from Jati.Base.Log import Log
 from Jati.Base.Controller import Controller as JatiBaseController
+from Jati.Base.Middleware import Middleware as JatiBaseMiddleware
 
 class Route:
 
@@ -168,7 +170,7 @@ class BaseRoute:
     controllerCache = {}
     middlewareCache = {}
 
-    def __init__(self, app_module, isWsRoute = False):
+    def __init__(self, app_module, isWsRoute = False, log:Log=None):
         self.router = Router() # this is main router
         self.isWsRoute = isWsRoute
         self.Controller = app_module.Controller
@@ -178,6 +180,7 @@ class BaseRoute:
         self.Modules = {}
         self.Services = {}
         self.appPath = app_module.__path__[0]
+        self.log = log
 
     # print router as object
     def print(self):
@@ -233,21 +236,40 @@ class BaseRoute:
             controller = controller.split('@', 1)
             controller_class_name = controller[0].split('/')
             if not controller[0] in self.controllerCache:
-                controller_class = self.Controller
-                for c_class_name in controller_class_name:
-                    controller_class = getattr(controller_class, c_class_name)
-                
-                if JatiBaseController in inspect.getmro(controller_class):
+                controller_class = None
+                # try search controller class in Apps
+                try:
+                    controller_class = self.Controller
+                    for c_class_name in controller_class_name:
+                        controller_class = getattr(controller_class, c_class_name)
+                except AttributeError:
+                    controller_class = None
+
+                # try search controller class in dependencies
+                if controller_class is None:
+                    try:
+                        for c_class_name in controller_class_name:
+                            if controller_class is None:
+                                controller_class = __import__(c_class_name)
+                            else:
+                                controller_class = getattr(controller_class, c_class_name)
+                    except (AttributeError, ModuleNotFoundError):
+                        controller_class = None
+                        
+                if controller_class and hasattr(controller_class,'__mro__') and JatiBaseController in inspect.getmro(controller_class):
                     controller_class.appPath = self.appPath
                     controller_class.Databases = self.Databases
                     controller_class.Models = self.Models
                     controller_class.Services = self.Services
                     self.controllerCache[controller[0]] = controller_class()
+                elif self.log:
+                    self.log.error("Controller (%s) not found. Check your router json", controller[0])
 
             if controller[0] in self.controllerCache:
                 if len(controller) > 1:
                     return getattr(self.controllerCache[controller[0]], controller[1])
                 else:
+                    # controller as handler
                     return self.controllerCache[controller[0]]
 
         elif callable(controller):
@@ -259,17 +281,39 @@ class BaseRoute:
             middleware = middleware.split('@', 1)
             middleware_class_name = middleware[0].split('/')
             if not middleware[0] in self.middlewareCache:
-                middleware_class = self.Middleware
-                for mw_class_name in middleware_class_name:
-                    middleware_class = getattr(middleware_class, mw_class_name)
-                
-                middleware_class.appPath = self.appPath
-                middleware_class.Databases = self.Databases
-                middleware_class.Models = self.Models
-                middleware_class.Services = self.Services
-                self.middlewareCache[middleware[0]] = middleware_class()
+                middleware_class = None
+
+                # try search middleware class in Apps
+                try:
+                    middleware_class = self.Middleware
+                    for mw_class_name in middleware_class_name:
+                        middleware_class = getattr(middleware_class, mw_class_name)
+                except AttributeError:
+                    middleware_class = None
+
+                # try search middleware class in dependencies
+                if middleware_class is None:
+                    try:
+                        for mw_class_name in middleware_class_name:
+                            if middleware_class is None:
+                                middleware_class = __import__(mw_class_name)
+                            else:
+                                middleware_class = getattr(middleware_class, mw_class_name)
+                    except (AttributeError, ModuleNotFoundError):
+                        middleware_class = None
+
+                if middleware_class and hasattr(middleware_class,'__mro__') and JatiBaseMiddleware in inspect.getmro(middleware_class):
+                    middleware_class.appPath = self.appPath
+                    middleware_class.Databases = self.Databases
+                    middleware_class.Models = self.Models
+                    middleware_class.Services = self.Services
+                    self.middlewareCache[middleware[0]] = middleware_class()
+                elif self.log:
+                    self.log.error("Middleware (%s) not found. Check your router json.", middleware[0])
+
             if middleware[0] in self.middlewareCache and len(middleware) > 1:
                 return getattr(self.middlewareCache[middleware[0]], middleware[1])
+
         elif callable(middleware):
             return middleware
         return None

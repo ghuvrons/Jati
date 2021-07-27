@@ -18,10 +18,12 @@ class App:
         self.importAppSystem()
         httpRouter = BaseRoute(
             self.app_module, 
+            log = self.Log 
         )
         wsRouter = BaseRoute(
             self.app_module, 
-            isWsRoute=True
+            isWsRoute=True,
+            log = self.Log 
         )
         httpRouter.Databases = self.Databases
         httpRouter.Models = self.Models
