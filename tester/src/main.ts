@@ -1,6 +1,6 @@
 import Tester, { BaseTester, TesterRunner } from "../my_modules/tester"
 import { TesterHttpRequest } from "./tester";
-import * as gg from './test_data/http-request.json';
+import gg from './test_data/http-request.json';
 
 var testers: Array<Tester> = [];
 gg.forEach(jsonTester => {
