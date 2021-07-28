@@ -1,0 +1,12 @@
+{
+  "devDependencies": {
+    "typescript": "^4.3.5"
+  },
+  "scripts": {
+    "build": "tsc src/main.ts --outDir tsbuild --resolveJsonModule",
+    "start": "npm run build && node tsbuild/src/main.js"
+  },
+  "dependencies": {
+    "axios": "^0.21.1"
+  }
+}
