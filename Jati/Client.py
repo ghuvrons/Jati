@@ -1,27 +1,35 @@
 import os, traceback
+from socket import socket as Socket
+from socketserver import BaseServer
 from inspect import getfullargspec, getmro
+from typing import Tuple
 from .Error import *
 from .Base.App import App as JatiApp
 from .Base.Controller import Controller as JatiBaseController
 from .HTTPClientHandler import HTTPClientHandler
-from .HTTPRequest import HTTPRequest
-from .HTTPResponse import HTTPResponse
 from .WebsocketClient import WebsocketClient
 
 class Client(HTTPClientHandler):
-    def __init__(self, connection, client_address, Applications, server):
+    def __init__(self, 
+        connection: Socket, client_address: Tuple[str, int], server: BaseServer,
+        Applications, 
+        on_starting = None,
+        on_closing = None
+    ):
         if not Applications:
             raise JatiError("Application module is not set yet.")
         self.app: JatiApp = None
         self.session = None
         self.auth = None
-        server.client_create_listener(self)
+
+        if on_starting != None and callable(on_starting): on_starting(self)
+        if on_closing != None: self.on_closing = on_closing
+
         super().__init__(
             connection, 
-            server.server_socket, 
             client_address, 
-            Applications, 
-            server.client_close_listener
+            server, 
+            Applications
         )
 
     def set_app(self, app: JatiApp):

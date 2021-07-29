@@ -1,14 +1,12 @@
 import json, cgi
 from urllib.parse import urlparse, parse_qs
-from typing import BinaryIO
+from typing import BinaryIO, Tuple
 from http.client import HTTPMessage
-
-from .Error import WSError
 
 class HTTPRequest:
     def __init__(self):
         self.connection = None
-        self.client_address: tuple = None
+        self.client_address: Tuple[str, int] = None
         self.rfile: BinaryIO = None
         self.wfile: BinaryIO = None
         self.headers: HTTPMessage = None
@@ -41,22 +39,3 @@ class HTTPRequest:
                     environ={'REQUEST_METHOD':'POST',
                                 'CONTENT_TYPE':self.headers['Content-Type']
                     })
-    
-    def parseWsData(self, msg):
-        try:
-            msg = json.loads(msg)
-            # msg = {
-            #     'request': ...
-            #     'data': ...
-            # }
-        except ValueError:
-            return
-        
-        if not 'request' in msg:
-            raise WSError(500)
-        request = str(msg["request"])
-        if not 'data' in msg:
-            msg["data"] = {}
-        self.data = msg["data"]
-
-        return request

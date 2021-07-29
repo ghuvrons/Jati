@@ -1,10 +1,9 @@
-import traceback
+import os, ssl, traceback, mimetypes, json, decimal
 import socket
-import mimetypes
-import os, ssl, json, decimal
+from socketserver import BaseServer
 from http.server import BaseHTTPRequestHandler, HTTPStatus
+from typing import Tuple
 
-from .Error import JatiError
 from .HTTPResponse import HTTPResponse
 from .HTTPRequest import HTTPRequest
 from .Base.App import App as BaseApp
@@ -22,21 +21,21 @@ def encode_complex(obj):
 class HTTPClientHandler(BaseHTTPRequestHandler):
     isSSL = False
 
-    def __init__(self, connection, server_socket, client_address, Applications, close_listener = None):
+    def __init__(self, connection: socket.socket, client_address: Tuple[str, int], server: BaseServer, Applications):
         self.Applications = Applications
-        connection.settimeout(100) 
         self.hostname = None
         self.client_sock = connection
         self.client_address = client_address
         self.isSetupSuccess = True
+
+        connection.settimeout(100)
 
         self._request = HTTPRequest()
         self._request.client_address = client_address
         self._response = HTTPResponse()
         self._session: Session = None
 
-        if close_listener != None: self.on_closing = close_listener
-        BaseHTTPRequestHandler.__init__(self, connection, client_address, server_socket)
+        super().__init__(connection, client_address, server)
 
     def servername_callback(self, sock, req_hostname, cb_context, as_callback=True):
         self.hostname = req_hostname
