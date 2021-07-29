@@ -142,26 +142,27 @@ class HTTPClientHandler(BaseHTTPRequestHandler):
         self.send_response(code, header_message)
         msg_attr = dir(msg)
         if 'name' in msg_attr and 'fileno' in msg_attr:
-            self.send_header("Content-Length", os.fstat(msg.fileno()).st_size)
+            self._response.set_header("Content-Length", os.fstat(msg.fileno()).st_size)
             ext = msg.name.split('.')[-1]
             if ext in self.contentType:
-                self.send_header("Content-Type", self.contentType[ext])
+                self._response.set_header("Content-Type", self.contentType[ext])
             else:
                 ext_type = mimetypes.guess_type(msg.name)[0]
                 if ext_type and ext_type.split('/')[0] == 'text':
-                    self.send_header("Content-Type", 'text/plain')
+                    self._response.set_header("Content-Type", 'text/plain')
                 else:
-                    self.send_header("Content-Type", 'application/octet-stream')
+                    self._response.set_header("Content-Type", 'application/octet-stream')
             if self._response.headers.get('Content-Type', False):
                 del self._response.headers['Content-Type']
-        elif self._response.headers.get('Content-Type') == "application/json":
+        elif self._response.content_type == "json":
+            self._response.set_header("Content-Type", "application/json")
             msg = json.dumps(msg, default=encode_complex)
-            self.send_header("Content-Length", len(msg))
+            self._response.set_header("Content-Length", len(msg))
         elif type(msg) == str:
-            self.send_header("Content-Length", len(msg))
+            self._response.set_header("Content-Length", len(msg))
         else:
             msg = '{}'.format(msg)
-            self.send_header("Content-Length", len(msg))
+            self._response.set_header("Content-Length", len(msg))
         for key in self._response.headers.keys():
             self.send_header(key, self._response.headers[key])
         self.end_headers()
