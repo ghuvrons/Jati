@@ -133,7 +133,7 @@ class TesterHttpRequest extends BaseTester implements Tester {
         let myExpect = this.arg.expectation
 
         // check status error
-        if (myExpect.statusCode || myExpect.statusCode != status){
+        if (!myExpect.statusCode || myExpect.statusCode != status){
             throw new Error("StatusCode error. Got "+status);
             
         }
