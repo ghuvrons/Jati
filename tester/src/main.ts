@@ -1,13 +1,25 @@
-import Tester, { BaseTester, TesterRunner } from "../my_modules/tester"
+import Tester, { BaseTester, TesterRunner, TesterError } from "../my_modules/tester";
 import { TesterHttpRequest } from "./tester";
-import gg from './test_data/http-request.json';
+import test_data from './test_data/http-request.json';
 
+// initiate data
 var testers: Array<Tester> = [];
-gg.forEach(jsonTester => {
-    let tester = new TesterHttpRequest(jsonTester.name)
+let i = 0
+test_data.forEach(jsonTester => {
+    let tester = new TesterHttpRequest("Test Request #"+(i++))
     testers.push(tester)
 });
 
-TesterRunner.run(testers).then((r)=>{
+TesterRunner.run(async (t:Tester) => {
+    await t.run("tes1", async () => {
+        await t.run("tes1a", async () => {
+            throw new Error("Whoops!");
+        })
+    })
+    testers.forEach(tester => {
+        t.run(tester.name, tester)
+    });
+})
+.then((r)=>{
     
 })

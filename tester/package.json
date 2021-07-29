@@ -4,7 +4,7 @@
   },
   "scripts": {
     "build": "tsc  --build tsconfig.json",
-    "start": "npm run build && node tsbuild/src/main.js"
+    "start": "if [ -d './dist' ] \nthen \n rm -R ./dist/* \nfi \nnpm run build && node ./dist/src/main.js"
   },
   "dependencies": {
     "axios": "^0.21.1"

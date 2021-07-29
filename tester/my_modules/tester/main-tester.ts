@@ -1,15 +1,33 @@
-import Tester, { BaseTester } from './tester'
+import Tester, { BaseTester, TesterResult } from './tester'
 
-class TesterResult {
+class TesterRunner extends BaseTester implements Tester {
+    name: string = "";
 
-}
-
-class TesterRunner {
-    static async run(testers: Array<Tester>): Promise<TesterResult>{
-        let result = new TesterResult();
-        for (let i = 0; i < testers.length; i++){
-            await testers[i].run()
+    constructor(){
+        super();
+    }
+    async run(name: string, t:Tester|(() => Promise<void>)): Promise<void>{
+        this.log("---------------------------------")
+        if (typeof t === "function") {
+            this.name = name
+            this.testFunc = t
+            let result = await this.runTest()
+            result.print()
+        } else {
+            if (t.runTest != undefined){
+                t.name = name
+                let result = await t.runTest()
+                result.print()
+            }
         }
+        this.log("---------------------------------")
+        return 
+    };
+
+    static async run(f :(tester: Tester) => Promise<void>) : Promise<TesterResult>{
+        let result = new TesterResult();
+        let mainTester = new TesterRunner()
+        await f(mainTester)
         return result
     }
 }
