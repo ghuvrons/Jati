@@ -70,7 +70,7 @@ class TesterHttpRequest extends BaseTester implements Tester {
         return config
     }
 
-    expectSuccess(response: AxiosResponse<string>){
+    expectSuccess(response: AxiosResponse<any>){
         if (this.arg.expectation == undefined) return
         let myExpect = this.arg.expectation
 
@@ -107,19 +107,17 @@ class TesterHttpRequest extends BaseTester implements Tester {
                     throw new TesterError("Body not match. Got", response.data, ". Want", myExpect.body.raw);
 
             if (myExpect.body.jsonKeys) {
-                const data = JSON.parse(response.data);
                 for (const k of myExpect.body.jsonKeys) {
                     let keys = k.split(".");
-                    if (objectGet(data, keys) == undefined)
+                    if (objectGet(response.data, keys) == undefined)
                         throw new TesterError("Body json key",k,"is not exists");
                 }
             }
 
             if (myExpect.body.jsonValues) {
-                const data = JSON.parse(response.data);
                 for (const k in myExpect.body.jsonValues) {
                     let keys = k.split(".");
-                    const jsonValue = objectGet(data, keys)
+                    const jsonValue = objectGet(response.data, keys)
                     if (jsonValue != myExpect.body.jsonValues[k])
                         throw new TesterError(
                             "Body json key",k,"is not match. Got",jsonValue,
@@ -143,7 +141,7 @@ class TesterHttpRequest extends BaseTester implements Tester {
 
     async testFunc(){
         try {
-            let response = await axios.request<string>(this.config())
+            let response = await axios.request(this.config())
             this.expectSuccess(response)
         } catch (error) {
             if (error.response) {
