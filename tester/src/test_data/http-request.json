@@ -1,5 +1,33 @@
 [
   {
-    "name": "tester 1"
+    "name": "tester 1",
+    "url": "/",
+    "expectation": {
+      "statusCode": 200,
+      "headers": {
+        "keys": ["server"],
+        "values": {"server": "BaseHTTP/0.6 Python/3.7.3"}
+      },
+      "body": {
+        "raw": "Hello World",
+        "jsonKeys": ["data.token"]
+      }
+    }
+  },
+  {
+    "name": "tester 2",
+    "url": "/ak",
+    "expectation": {
+      "statusCode": 404
+    }
+  },
+  {
+    "name": "tester 3",
+    "url": "/hello",
+    "expectation": {
+      "body": {
+        "jsonKeys": ["say.hello", "token"]
+      }
+    }
   }
 ]

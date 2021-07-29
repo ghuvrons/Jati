@@ -81,8 +81,8 @@ class TesterResult {
 }
 
 class TesterError extends Error {
-    constructor (message: string) {
-        super(message);    
+    constructor (...message: Array<string>) {
+        super(message.join(' '));    
     }
 }
 
