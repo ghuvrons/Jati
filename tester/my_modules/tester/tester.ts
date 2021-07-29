@@ -39,7 +39,7 @@ class BaseTester implements Tester{
             try{
                 await this.testFunc()
             }
-            catch(err){
+            catch(err: any){
                 result.error = err
             }
             let end = new Date();
@@ -63,7 +63,7 @@ class BaseTester implements Tester{
 
 class TesterResult {
     public executetime: number = 0
-    public error: TesterError | undefined
+    public error: Error | undefined
 
     constructor(){
 
