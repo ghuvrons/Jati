@@ -4,6 +4,7 @@ from socketserver import BaseServer
 from inspect import getfullargspec, getmro
 from typing import Tuple
 from .Error import *
+from .Base.AppManager import AppManager
 from .Base.App import App as JatiApp
 from .Base.Controller import Controller as JatiBaseController
 from .HTTPClientHandler import HTTPClientHandler
@@ -12,7 +13,7 @@ from .WebsocketClient import WebsocketClient
 class Client(HTTPClientHandler):
     def __init__(self, 
         connection: Socket, client_address: Tuple[str, int], server: BaseServer,
-        Applications, 
+        Applications: AppManager, 
         on_starting = None,
         on_closing = None
     ):

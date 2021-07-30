@@ -7,6 +7,7 @@ from typing import Tuple
 from .HTTPResponse import HTTPResponse
 from .HTTPRequest import HTTPRequest
 from .Base.App import App as BaseApp
+from .Base.AppManager import AppManager
 from .Base.Session import Session
 
 def encode_complex(obj): 
@@ -21,7 +22,7 @@ def encode_complex(obj):
 class HTTPClientHandler(BaseHTTPRequestHandler):
     isSSL = False
 
-    def __init__(self, connection: socket.socket, client_address: Tuple[str, int], server: BaseServer, Applications):
+    def __init__(self, connection: socket.socket, client_address: Tuple[str, int], server: BaseServer, Applications: AppManager):
         self.Applications = Applications
         self.hostname = None
         self.client_sock = connection
@@ -40,7 +41,7 @@ class HTTPClientHandler(BaseHTTPRequestHandler):
     def servername_callback(self, sock, req_hostname, cb_context, as_callback=True):
         self.hostname = req_hostname
         try:
-            app = self.Applications.get(req_hostname, self.Applications['localhost'])
+            app = self.Applications.get(req_hostname)
             sock.context = app.ssl_context
         except Exception:
             g = traceback.format_exc()
@@ -78,7 +79,7 @@ class HTTPClientHandler(BaseHTTPRequestHandler):
             if host != '':
                 self.hostname = host
 
-        jatiApp: BaseApp = Apps[self.hostname] if self.hostname in Apps else Apps["localhost"]
+        jatiApp = Apps.get(self.hostname)
         self.set_app(jatiApp)
 
         cookies = jatiApp.Session.get_cookies(self)
