@@ -1,35 +1,51 @@
 import threading
 import random
-import time
 import datetime
 import pickle, os
 
+
 class Session:
+    """
+    Session Base Class.
+    Session <One to many> connection.
+    """
+
     def __init__(self, sesid, timeout = 259200):
         self.id = sesid
         self.timeout = timeout
         self.idle = datetime.datetime.now()
         self.data = {}
 
-    def setData(self, param, value):
+
+    def set_data(self, param, value):
+        """Save data"""
         self.data[param] = value
         self.idle = datetime.datetime.now()
 
-    def getData(self, param):
+
+    def get_data(self, param):
+        """Get data"""
         if param in self.data:
             self.idle = datetime.datetime.now()
             return self.data[param]
         return None
 
-    def delData(self, param):
+
+    def del_data(self, param):
+        """Delete data"""
         del self.data[param]
         self.idle = datetime.datetime.now()
 
-    def delAllData(self):
+
+    def del_all_data(self):
+        """Delete all data"""
         self.data = {}
         self.idle = datetime.datetime.now()
 
+
 class SessionHandler(threading.Thread):
+    """Session Handler"""
+
     def __init__(self, path_save):
         threading.Thread.__init__(self)
         self.path_save = path_save
@@ -40,7 +56,9 @@ class SessionHandler(threading.Thread):
         else:
             self.sessionList = {}
 
+
     def generate_id_cookies(self):
+        """Generate Cookie id"""
         sesid = ''
         for x in range(26):
             c = random.randint(1, 31)
@@ -58,13 +76,17 @@ class SessionHandler(threading.Thread):
                 sesid += str(c)
         return sesid
 
+
     def generate_key(self):
+        """Generate session id"""
         session_id = self.generate_id_cookies()
         while session_id in self.sessionList:
             session_id = self.generate_id_cookies()
         return session_id
 
+
     def get_cookies(self, request):
+        """Get cookies from request header"""
         cookies = {}
         if 'Cookie' in request.headers:
             for cookies_header in request.headers['Cookie'].split('; '):
@@ -72,7 +94,9 @@ class SessionHandler(threading.Thread):
                 cookies[key] = val
         return cookies
 
+
     def create(self, request, response):
+        """create Session"""
         cookies = self.get_cookies(request)
         if 'PySessID' in cookies:
             session_id = cookies['PySessID']
@@ -84,7 +108,12 @@ class SessionHandler(threading.Thread):
         self.sessionList[session_id] = Session(session_id)
         return self.sessionList[session_id]
 
+
     def run(self):
+        """
+        Running handler until application is closed.
+        expired session will be deleted.
+        """
         while not self.isClose.wait(60):
             now = datetime.datetime.now()
             s_l = sorted(self.sessionList.values(), key=lambda g:g.idle+datetime.timedelta(seconds=g.timeout))
@@ -94,7 +123,9 @@ class SessionHandler(threading.Thread):
                 else:
                     break
 
+
     def close(self):
+        """Close Session Handler"""
         self.isClose.set()
         with open(self.path_save, 'wb') as output:  # Overwrites any existing file.
             pickle.dump(self.sessionList, output, pickle.HIGHEST_PROTOCOL)

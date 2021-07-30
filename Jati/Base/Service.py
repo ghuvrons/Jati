@@ -1,10 +1,14 @@
 import threading, os, traceback
+from .Logger import Logger
 
 class Service(threading.Thread):
+    """Service Base Class"""
+    
     STATUS_RUNNING = 0x80
+    STATUS_STOP = 0x00
     Databases = {}
     Models = {}
-    Log = None
+    Log:Logger = None
 
     def __init__(self):
         threading.Thread.__init__(self)
@@ -15,20 +19,24 @@ class Service(threading.Thread):
         r, w = os.pipe()
         self.rpipe, self.wpipe = (os.fdopen(r, 'rb'), os.fdopen(w, 'wb'))
         self.clients = []
-        self.__status =  0x00
-    
-    def addStreamer(self, req):
+        self.__status = Service.STATUS_STOP
+
+
+    def add_streamer(self, req):
         if req.ws != None:
             self.clients.append(req.ws)
             def out(ws):
                 self.clients.remove(ws)
             req.ws.on("close", out)
 
+
     def broadcast(self, resp, data):
         for c in self.clients:
             c.sendRespond(resp, respData = data)
 
+
     def run(self):
+        """Running service until it closed"""
         while (self.listener.wait(self.timeout) or True) and not self.isClosed:
             try:
                 if self.listener.is_set():
@@ -53,18 +61,20 @@ class Service(threading.Thread):
         self.wpipe.close()
         self.rpipe.close()
 
-    def loop(self):
-        pass
+
+    def loop(self):pass
+
 
     def emit(self, event, data = None):
         if (self.__status & Service.STATUS_RUNNING == Service.STATUS_RUNNING): 
             return False
         self.__status |= Service.STATUS_RUNNING
         self.tmpdata = data
-        self.writePipe(event)
+        self.write_pipe(event)
         return True
 
-    def writePipe(self, msg):
+
+    def write_pipe(self, msg):
         l = len(msg)
         if l == 0: return
         if l > 255: return
@@ -73,6 +83,8 @@ class Service(threading.Thread):
         self.wpipe.flush()
         self.listener.set()
 
+
     def close(self):
+        """Stop service then close"""
         self.isClosed = True
         self.listener.set()

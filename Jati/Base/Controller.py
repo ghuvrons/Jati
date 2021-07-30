@@ -1,4 +1,6 @@
 class Controller:
+    """Controller Base Class"""
+    
     def __init__(self): pass
 
     def _http_handler(self): return ""

@@ -114,7 +114,7 @@ class Client(HTTPClientHandler):
                 pass
 
             self.run_authorization()
-            middleware, controller, self.parameter, errorHandler = self.app.route.search(self._request.path, method)
+            middleware, controller, self.parameter, errorHandler = self.app.router.search(self._request.path, method)
             self.run_middleWare(method, middleware)
 
             if not controller:

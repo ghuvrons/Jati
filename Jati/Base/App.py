@@ -1,36 +1,26 @@
-from Jati.Base.Log import Log
-from Jati.Base.Session import SessionHandler
-from Jati.Base.Route import BaseRoute, Route
-from Jati.Base.Auth import AuthHandler
+from .Logger import Logger
+from .Session import SessionHandler
+from .Route import Router, BaseRoute, json_to_router
+from .Auth import AuthHandler
 import sys, json, ssl
 
 class App:
-    def __init__(self, app_module, config = {}):
+    """
+    App class will handle host site
+    """
+
+    def __init__(self, app_module, config = {}):    
         self.app_module = app_module
         self.appPath = app_module.__path__[0]
         self.Databases = {}
         self.Models = {}
         self.Modules = {}
         self.Services = {}
-        self.Log = Log('Jati.'+app_module.__name__, filepath=self.appPath+"/Log/log.log")
-        self.route_config = []
+        self.router: Router = None
+        self.Log = Logger('Jati.'+app_module.__name__, filepath=self.appPath+"/Log/log.log")
         self.authHandler = AuthHandler()
-        self.importAppSystem()
+        self.load_app_system()
 
-        httpRouter = BaseRoute(
-            self.app_module, 
-            log = self.Log 
-        )
-        httpRouter.Databases = self.Databases
-        httpRouter.Models = self.Models
-        httpRouter.Modules = self.Modules
-        httpRouter.Services = self.Services
-        httpRouter.generateRoute(self.route_config)
-
-        # httpRouter.print()
-
-        self.route = httpRouter.router
-        
         self.default_config = {
             "Session-path" : self.appPath+"/session.pkl",
             "limit": {
@@ -50,12 +40,18 @@ class App:
         self.Session = SessionHandler(self.config["Session-path"])
         self.Session.start()
 
-    def importAppSystem(self):
+
+    def load_app_system(self):
+        """
+        Load all requrement from application module.
+        """
         app_mod_name = self.app_module.__name__
         __import__(app_mod_name, fromlist=[
             "Controller", "Middleware", "Database", "Service", "Model", "Route"
         ])
 
+        # Load Controllers module
+        # Controllers class will be save in route. see Jati.Base.Route
         try:
             controller_json = open(sys.modules[app_mod_name+".Controller"].__path__[0]+"/controller.json")
             controller_list = json.load(controller_json)
@@ -65,6 +61,8 @@ class App:
             self.Log.error( "Controller error : %s", e)
             pass
 
+        # Load Middlewares
+        # as controllers. Middleware class will be save in route. see Jati.Base.Route
         try:
             middleware_json = open(sys.modules[app_mod_name+".Middleware"].__path__[0]+"/middleware.json")
             middleware_list = json.load(middleware_json)
@@ -74,12 +72,12 @@ class App:
             self.Log.error( "Middleware error : %s", e)
             pass
 
+        # Load Database Driver
         try:
             database_json = open(sys.modules[app_mod_name+".Database"].__path__[0]+"/database.json")
             database_obj = json.load(database_json)
             database_json.close()
 
-            # __import__(app_mod_name+".Database", fromlist=[str(s) for s in middleware_list], globals=globals())
             for db_key in database_obj.keys():
                 db_config = database_obj[db_key]
                 __import__(db_config['driver'])
@@ -88,6 +86,7 @@ class App:
             self.Log.error( "Database error : %s", e)
             pass
 
+        # Load Model
         try:
             model_json = open(sys.modules[app_mod_name+".Model"].__path__[0]+"/model.json")
             model_obj = json.load(model_json)
@@ -108,6 +107,7 @@ class App:
             self.Log.error("Model error : %s", e)
             pass
         
+        # Load Service instance
         try:
             service_json = open(sys.modules[app_mod_name+".Service"].__path__[0]+"/service.json")
             service_obj = json.load(service_json)
@@ -129,17 +129,27 @@ class App:
             self.Log.error( "Service error : %s", e)
             pass
 
+        # Load Router
         try:
-            r = Route()
-            http_router_json = open(sys.modules[app_mod_name+".Route"].__path__[0]+"/http.json")
-            http_router = json.load(http_router_json)
-            http_router_json.close()
-            self.route_config = r.objToRoute(http_router)
+            route_config = json_to_router(sys.modules[app_mod_name+".Route"].__path__[0]+"/http.json")
+
+            route = BaseRoute(self.app_module)
+            route.Log = self.Log
+            route.Databases = self.Databases
+            route.Models = self.Models
+            route.Modules = self.Modules
+            route.Services = self.Services
+            route.generate_route(route_config)
+
+            self.router = route.router
+
+            # httpRouter.print()
 
         except Exception as e:
             self.Log.error("Route error : %s", e)
             pass
 
+        # Load Authenticator
         try:
             auth_config_json = open(sys.modules[app_mod_name].__path__[0]+"/Auth/Auth.json")
             auth_config = json.load(auth_config_json)
@@ -153,14 +163,18 @@ class App:
         except Exception as e:
             self.Log.error("Auth error : %s", e)
             pass
-        
 
-    def printAllModules(self):
+
+    def print_all_modules(self):
         modules = sys.modules.keys()
         modules.sort()
         for m in modules:
             print(m)
+
+
     def close(self):
+        """Close application"""
+
         self.Session.close()
         if 'Module' in dir(self.app_module) and hasattr(self.app_module.Module, 'close'):
             self.app_module.Module.close()
